@@ -1,6 +1,7 @@
 /**********************************************************************
  * 
  * StackWalker.cpp
+ * http://stackwalker.codeplex.com/
  *
  *
  * History:
@@ -41,7 +42,8 @@
  *                       Thanks to Luiz Salamon which reported this "bug"...
  *                       http://www.codeproject.com/KB/threads/StackWalker.aspx?msg=2822736#xx2822736xx
  *  2009-04-10   v9      License slihtly corrected (<ORGANIZATION> replaced)
- *  2009-11-01-  v10     Moved to stackwalker.codeplex.com
+ *  2009-11-01   v10     Moved to http://stackwalker.codeplex.com/
+ *  2009-11-02   v11     Now try to use IMAGEHLP_MODULE64_V3 if available
  *
  * LICENSE (http://www.opensource.org/licenses/bsd-license.php)
  *
@@ -351,7 +353,6 @@ public:
     pSGLFA = (tSGLFA) GetProcAddress(m_hDbhHelp, "SymGetLineFromAddr64" );
     pSGMB = (tSGMB) GetProcAddress(m_hDbhHelp, "SymGetModuleBase64" );
     pSGMI = (tSGMI) GetProcAddress(m_hDbhHelp, "SymGetModuleInfo64" );
-    //pSGMI_V3 = (tSGMI_V3) GetProcAddress(m_hDbhHelp, "SymGetModuleInfo64" );
     pSGSFA = (tSGSFA) GetProcAddress(m_hDbhHelp, "SymGetSymFromAddr64" );
     pUDSN = (tUDSN) GetProcAddress(m_hDbhHelp, "UnDecorateSymbolName" );
     pSLM = (tSLM) GetProcAddress(m_hDbhHelp, "SymLoadModule64" );
@@ -400,7 +401,8 @@ public:
   HANDLE m_hProcess;
   LPSTR m_szSymPath;
 
-/*typedef struct IMAGEHLP_MODULE64_V3 {
+#pragma pack(push,8)
+typedef struct IMAGEHLP_MODULE64_V3 {
     DWORD    SizeOfStruct;           // set to sizeof(IMAGEHLP_MODULE64)
     DWORD64  BaseOfImage;            // base load address of module
     DWORD    ImageSize;              // virtual size of the loaded module
@@ -410,11 +412,11 @@ public:
     SYM_TYPE SymType;                // type of symbols loaded
     CHAR     ModuleName[32];         // module name
     CHAR     ImageName[256];         // image name
-    // new elements: 07-Jun-2002
     CHAR     LoadedImageName[256];   // symbol file name
+    // new elements: 07-Jun-2002
     CHAR     LoadedPdbName[256];     // pdb file name
     DWORD    CVSig;                  // Signature of the CV record in the debug directories
-    CHAR         CVData[MAX_PATH * 3];   // Contents of the CV record
+    CHAR     CVData[MAX_PATH * 3];   // Contents of the CV record
     DWORD    PdbSig;                 // Signature of PDB
     GUID     PdbSig70;               // Signature of PDB (VC 7 and up)
     DWORD    PdbAge;                 // DBI age of pdb
@@ -427,9 +429,7 @@ public:
     BOOL     SourceIndexed;          // pdb supports source server
     BOOL     Publics;                // contains public symbols
 };
-*/
 
-#pragma pack(push,8)
 typedef struct IMAGEHLP_MODULE64_V2 {
     DWORD    SizeOfStruct;           // set to sizeof(IMAGEHLP_MODULE64)
     DWORD64  BaseOfImage;            // base load address of module
@@ -463,12 +463,8 @@ typedef struct IMAGEHLP_MODULE64_V2 {
   tSGMB pSGMB;
 
   // SymGetModuleInfo64()
-  typedef BOOL (__stdcall *tSGMI)( IN HANDLE hProcess, IN DWORD64 dwAddr, OUT IMAGEHLP_MODULE64_V2 *ModuleInfo );
+  typedef BOOL (__stdcall *tSGMI)( IN HANDLE hProcess, IN DWORD64 dwAddr, OUT IMAGEHLP_MODULE64_V3 *ModuleInfo );
   tSGMI pSGMI;
-
-//  // SymGetModuleInfo64()
-//  typedef BOOL (__stdcall *tSGMI_V3)( IN HANDLE hProcess, IN DWORD64 dwAddr, OUT IMAGEHLP_MODULE64_V3 *ModuleInfo );
-//  tSGMI_V3 pSGMI_V3;
 
   // SymGetOptions()
   typedef DWORD (__stdcall *tSGO)( VOID );
@@ -733,7 +729,7 @@ private:
       }
 
       // Retrive some additional-infos about the module
-      IMAGEHLP_MODULE64_V2 Module;
+      IMAGEHLP_MODULE64_V3 Module;
       const char *szSymType = "-unknown-";
       if (this->GetModuleInfo(hProcess, baseAddr, &Module) != FALSE)
       {
@@ -768,7 +764,10 @@ private:
             break;
         }
       }
-      this->m_parent->OnLoadModule(img, mod, baseAddr, size, result, szSymType, Module.LoadedImageName, fileVersion);
+      LPCSTR pdbName = Module.LoadedImageName;
+      if (Module.LoadedPdbName[0] != 0)
+        pdbName = Module.LoadedPdbName;
+      this->m_parent->OnLoadModule(img, mod, baseAddr, size, result, szSymType, pdbName, fileVersion);
     }
     if (szImg != NULL) free(szImg);
     if (szMod != NULL) free(szMod);
@@ -785,34 +784,41 @@ public:
   }
 
 
-  BOOL GetModuleInfo(HANDLE hProcess, DWORD64 baseAddr, IMAGEHLP_MODULE64_V2 *pModuleInfo)
+  BOOL GetModuleInfo(HANDLE hProcess, DWORD64 baseAddr, IMAGEHLP_MODULE64_V3 *pModuleInfo)
   {
+    memset(pModuleInfo, 0, sizeof(IMAGEHLP_MODULE64_V3));
     if(this->pSGMI == NULL)
     {
       SetLastError(ERROR_DLL_INIT_FAILED);
       return FALSE;
     }
     // First try to use the larger ModuleInfo-Structure
-//    memset(pModuleInfo, 0, sizeof(IMAGEHLP_MODULE64_V3));
-//    pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
-//    if (this->pSGMI_V3 != NULL)
-//    {
-//      if (this->pSGMI_V3(hProcess, baseAddr, pModuleInfo) != FALSE)
-//        return TRUE;
-//      // check if the parameter was wrong (size is bad...)
-//      if (GetLastError() != ERROR_INVALID_PARAMETER)
-//        return FALSE;
-//    }
-    // could not retrive the bigger structure, try with the smaller one (as defined in VC7.1)...
-    pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
+    pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
     void *pData = malloc(4096); // reserve enough memory, so the bug in v6.3.5.1 does not lead to memory-overwrites...
     if (pData == NULL)
     {
       SetLastError(ERROR_NOT_ENOUGH_MEMORY);
       return FALSE;
     }
+    memcpy(pData, pModuleInfo, sizeof(IMAGEHLP_MODULE64_V3));
+    static bool s_useV3Version = true;
+    if (s_useV3Version)
+    {
+      if (this->pSGMI(hProcess, baseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
+      {
+        // only copy as much memory as is reserved...
+        memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V3));
+        pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
+        free(pData);
+        return TRUE;
+      }
+      s_useV3Version = false;  // to prevent unneccessarry calls with the larger struct...
+    }
+
+    // could not retrive the bigger structure, try with the smaller one (as defined in VC7.1)...
+    pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
     memcpy(pData, pModuleInfo, sizeof(IMAGEHLP_MODULE64_V2));
-    if (this->pSGMI(hProcess, baseAddr, (IMAGEHLP_MODULE64_V2*) pData) != FALSE)
+    if (this->pSGMI(hProcess, baseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
     {
       // only copy as much memory as is reserved...
       memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V2));
@@ -991,7 +997,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
   CONTEXT c;
   CallstackEntry csEntry;
   IMAGEHLP_SYMBOL64 *pSym = NULL;
-  StackWalkerInternal::IMAGEHLP_MODULE64_V2 Module;
+  StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
   IMAGEHLP_LINE64 Line;
   int frameNum;
   bool bLastEntryCalled = true;
