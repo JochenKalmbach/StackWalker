@@ -14,7 +14,8 @@
 #include <tchar.h>
 #include <stdio.h>
 
-//#define EXCEPTION_TESTS
+#define UNHANDLED_EXCEPTION_TEST
+#define EXCEPTION_FILTER_TEST
 
 // secure-CRT_functions are only available starting with VC8
 #if _MSC_VER < 1400
@@ -63,7 +64,7 @@ void StackWalkTest()
   Func1();
 }
 
-#ifdef EXCEPTION_TESTS
+#ifdef UNHANDLED_EXCEPTION_TEST
 
 // For more info about "PreventSetUnhandledExceptionFilter" see:
 // "SetUnhandledExceptionFilter" and VC8
@@ -79,9 +80,6 @@ LPTOP_LEVEL_EXCEPTION_FILTER WINAPI
 {
   return NULL;
 }
-#else
-#pragma message("This code works only for x86 and x64!")
-#endif
 
 BOOL PreventSetUnhandledExceptionFilter()
 {
@@ -128,6 +126,9 @@ BOOL PreventSetUnhandledExceptionFilter()
   }
   return bRet;
 }
+#else
+#pragma message("This code works only for x86 and x64!")
+#endif
 
 static TCHAR s_szExceptionLogFileName[_MAX_PATH] = _T("\\exceptions.log");  // default
 static BOOL s_bUnhandledExeptionFilterSet = FALSE;
@@ -174,13 +175,23 @@ static void InitUnhandledExceptionFilter()
   {
     // set global exception handler (for handling all unhandled exceptions)
     SetUnhandledExceptionFilter(CrashHandlerExceptionFilter);
+#if defined _M_X64 || defined _M_IX86
     PreventSetUnhandledExceptionFilter();
+#endif
     s_bUnhandledExeptionFilterSet = TRUE;
   }
 }
+#endif  // UNHANDLED_EXCEPTION_TEST
 
-
-/*void ExpTest5() { char *p = NULL; p[0] = 0; }
+#ifdef EXCEPTION_FILTER_TEST
+LONG WINAPI ExpFilter(EXCEPTION_POINTERS* pExp, DWORD dwExpCode)
+{
+  //StackWalker sw;  // output to default (Debug-Window)
+  StackWalkerToConsole sw;  // output to the console
+  sw.ShowCallstack(GetCurrentThread(), pExp->ContextRecord);
+  return EXCEPTION_EXECUTE_HANDLER;
+}
+void ExpTest5() { char *p = NULL; p[0] = 0; printf(p); }
 void ExpTest4() { ExpTest5(); }
 void ExpTest3() { ExpTest4(); }
 void ExpTest2() { ExpTest3(); }
@@ -193,24 +204,31 @@ void TestExceptionWalking()
   }
   __except (ExpFilter(GetExceptionInformation(), GetExceptionCode()))
   {
+    printf("\n\nException-Handler called\n\n\n");
   }
-}*/
+}
 
 int f(int i)
 {
   if (i<0) return i;
   return f(i+1);
 }
-
-#endif
+#endif  // EXCEPTION_FILTER_TEST
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-  // Shows the StackWalker-Feature:
+  printf("\n\n\nShow a simple callstack of the current thread:\n\n\n");
   StackWalkTest();
 
-#ifdef EXCEPTION_TESTS
-  // Exception-Tests:
+#ifdef EXCEPTION_FILTER_TEST
+  printf("\n\n\nShow a the callstack from inside an execption-handler:\n\n\n");
+  TestExceptionWalking();
+#endif
+
+#ifdef UNHANDLED_EXCEPTION_TEST
+  printf("\n\n\nCatch unhandled exceptions and show the callstack:\n\n\n");
+  // This will only work, if the programm is *not* started under a debugger
+  // If the program is running under a debugger, the debugger will catch this exception ;)
   InitUnhandledExceptionFilter();
   //f(0);  // endlress recursion
   char *szTemp = (char*)1;
