@@ -151,7 +151,7 @@ static LONG __stdcall CrashHandlerExceptionFilter(EXCEPTION_POINTERS* pExPtrs)
   sw.ShowCallstack(GetCurrentThread(), pExPtrs->ContextRecord);
   TCHAR lString[500];
   _stprintf_s(lString,
-     _T("*** Unhandled Exception!\n")
+     _T("*** Unhandled Exception! See console output for more infos!\n")
      _T("   ExpCode: 0x%8.8X\n")
      _T("   ExpFlags: %d\n")
      _T("   ExpAddress: 0x%8.8X\n")

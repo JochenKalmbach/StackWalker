@@ -44,10 +44,13 @@
  *  2009-04-10   v9      License slihtly corrected (<ORGANIZATION> replaced)
  *  2009-11-01   v10     Moved to http://stackwalker.codeplex.com/
  *  2009-11-02   v11     Now try to use IMAGEHLP_MODULE64_V3 if available
+ *  2010-04-15   v12     Added support for VS2010 RTM
+ *  2010-05-25   v13     Now using secure MyStrcCpy. Thanks to luke.simon:
+ *                       http://www.codeproject.com/KB/applications/leakfinder.aspx?msg=3477467#xx3477467xx
  *
  * LICENSE (http://www.opensource.org/licenses/bsd-license.php)
  *
- *   Copyright (c) 2005-2009, Jochen Kalmbach
+ *   Copyright (c) 2005-2011, Jochen Kalmbach
  *   All rights reserved.
  *
  *   Redistribution and use in source and binary forms, with or without modification, 
@@ -225,10 +228,25 @@ DWORD64
 // secure-CRT_functions are only available starting with VC8
 #if _MSC_VER < 1400
 #define strcpy_s strcpy
+#define strncpy_s strncpy
 #define strcat_s(dst, len, src) strcat(dst, src)
 #define _snprintf_s _snprintf
 #define _tcscat_s _tcscat
 #endif
+
+static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
+{
+  if (nMaxDestSize <= 0) return;
+  if (strlen(szSrc) < nMaxDestSize)
+  {
+    strcpy_s(szDest, nMaxDestSize, szSrc);
+  }
+  else
+  {
+    strncpy_s(szDest, nMaxDestSize, szSrc, nMaxDestSize);
+    szDest[nMaxDestSize-1] = 0;
+  }
+}  // MyStrCpy
 
 // Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
 #define USED_CONTEXT_FLAGS CONTEXT_FULL
@@ -1125,7 +1143,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
       // show procedure info (SymGetSymFromAddr64())
       if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol), pSym) != FALSE)
       {
-        strcpy_s(csEntry.name, pSym->Name);
+        MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
         // UnDecorateSymbolName()
         this->m_sw->pUDSN( pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY );
         this->m_sw->pUDSN( pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE );
@@ -1141,8 +1159,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
         if (this->m_sw->pSGLFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromLine), &Line) != FALSE)
         {
           csEntry.lineNumber = Line.LineNumber;
-          // TODO: Mache dies sicher...!
-          strcpy_s(csEntry.lineFileName, Line.FileName);
+          MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, Line.FileName);
         }
         else
         {
@@ -1190,10 +1207,9 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
           break;
         }
 
-        // TODO: Mache dies sicher...!
-        strcpy_s(csEntry.moduleName, Module.ModuleName);
+        MyStrCpy(csEntry.moduleName, STACKWALK_MAX_NAMELEN, Module.ModuleName);
         csEntry.baseOfImage = Module.BaseOfImage;
-        strcpy_s(csEntry.loadedImageName, Module.LoadedImageName);
+        MyStrCpy(csEntry.loadedImageName, STACKWALK_MAX_NAMELEN, Module.LoadedImageName);
       } // got module info OK
       else
       {
@@ -1272,20 +1288,21 @@ void StackWalker::OnCallstackEntry(CallstackEntryType eType, CallstackEntry &ent
   if ( (eType != lastEntry) && (entry.offset != 0) )
   {
     if (entry.name[0] == 0)
-      strcpy_s(entry.name, "(function-name not available)");
+      MyStrCpy(entry.name, STACKWALK_MAX_NAMELEN, "(function-name not available)");
     if (entry.undName[0] != 0)
-      strcpy_s(entry.name, entry.undName);
+      MyStrCpy(entry.name, STACKWALK_MAX_NAMELEN, entry.undName);
     if (entry.undFullName[0] != 0)
-      strcpy_s(entry.name, entry.undFullName);
+      MyStrCpy(entry.name, STACKWALK_MAX_NAMELEN, entry.undFullName);
     if (entry.lineFileName[0] == 0)
     {
-      strcpy_s(entry.lineFileName, "(filename not available)");
+      MyStrCpy(entry.lineFileName, STACKWALK_MAX_NAMELEN, "(filename not available)");
       if (entry.moduleName[0] == 0)
-        strcpy_s(entry.moduleName, "(module-name not available)");
+        MyStrCpy(entry.moduleName, STACKWALK_MAX_NAMELEN, "(module-name not available)");
       _snprintf_s(buffer, STACKWALK_MAX_NAMELEN, "%p (%s): %s: %s\n", (LPVOID) entry.offset, entry.moduleName, entry.lineFileName, entry.name);
     }
     else
       _snprintf_s(buffer, STACKWALK_MAX_NAMELEN, "%s (%d): %s\n", entry.lineFileName, entry.lineNumber, entry.name);
+    buffer[STACKWALK_MAX_NAMELEN-1] = 0;
     OnOutput(buffer);
   }
 }
