@@ -47,6 +47,9 @@
  *  2010-04-15   v12     Added support for VS2010 RTM
  *  2010-05-25   v13     Now using secure MyStrcCpy. Thanks to luke.simon:
  *                       http://www.codeproject.com/KB/applications/leakfinder.aspx?msg=3477467#xx3477467xx
+ *  2013-01-07   v14     Runtime Check Error VS2010 Debug Builds fixed:
+ *                       http://stackwalker.codeplex.com/workitem/10511
+ *
  *
  * LICENSE (http://www.opensource.org/licenses/bsd-license.php)
  *
@@ -1273,10 +1276,10 @@ void StackWalker::OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD s
     _snprintf_s(buffer, STACKWALK_MAX_NAMELEN, "%s:%s (%p), size: %d (result: %d), SymType: '%s', PDB: '%s'\n", img, mod, (LPVOID) baseAddr, size, result, symType, pdbName);
   else
   {
-    DWORD v4 = (DWORD) fileVersion & 0xFFFF;
-    DWORD v3 = (DWORD) (fileVersion>>16) & 0xFFFF;
-    DWORD v2 = (DWORD) (fileVersion>>32) & 0xFFFF;
-    DWORD v1 = (DWORD) (fileVersion>>48) & 0xFFFF;
+    DWORD v4 = (DWORD) (fileVersion & 0xFFFF);
+    DWORD v3 = (DWORD) ((fileVersion>>16) & 0xFFFF);
+    DWORD v2 = (DWORD) ((fileVersion>>32) & 0xFFFF);
+    DWORD v1 = (DWORD) ((fileVersion>>48) & 0xFFFF);
     _snprintf_s(buffer, STACKWALK_MAX_NAMELEN, "%s:%s (%p), size: %d (result: %d), SymType: '%s', PDB: '%s', fileVersion: %d.%d.%d.%d\n", img, mod, (LPVOID) baseAddr, size, result, symType, pdbName, v1, v2, v3, v4);
   }
   OnOutput(buffer);
