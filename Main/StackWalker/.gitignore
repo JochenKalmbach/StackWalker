@@ -2,6 +2,8 @@
 /*.user
 /*.sdf
 /*.opensdf
-/Debug_VC2010
+/Debug_*
+/Release_*
+/x64
 /Itanium
 /ipch

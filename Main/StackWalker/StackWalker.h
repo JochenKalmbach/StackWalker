@@ -177,7 +177,7 @@ protected:
 #ifdef CURRENT_THREAD_VIA_EXCEPTION
 // TODO: The following is not a "good" implementation, 
 // because the callstack is only valid in the "__except" block...
-#define GET_CURRENT_CONTEXT(c, contextFlags) \
+#define GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, contextFlags) \
   do { \
     memset(&c, 0, sizeof(CONTEXT)); \
     EXCEPTION_POINTERS *pExp = NULL; \
@@ -190,7 +190,7 @@ protected:
   } while(0);
 #else
 // The following should be enough for walking the callstack...
-#define GET_CURRENT_CONTEXT(c, contextFlags) \
+#define GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, contextFlags) \
   do { \
     memset(&c, 0, sizeof(CONTEXT)); \
     c.ContextFlags = contextFlags; \
@@ -205,7 +205,7 @@ protected:
 #else
 
 // The following is defined for x86 (XP and higher), x64 and IA64:
-#define GET_CURRENT_CONTEXT(c, contextFlags) \
+#define GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, contextFlags) \
   do { \
     memset(&c, 0, sizeof(CONTEXT)); \
     c.ContextFlags = contextFlags; \
