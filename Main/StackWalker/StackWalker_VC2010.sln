@@ -3,14 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 11.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StackWalker_VC2010", "StackWalker_VC2010.vcxproj", "{89B2BD42-B130-4811-9043-71A8EBC40DE5}"
 EndProject
 Global
-	GlobalSection(TeamFoundationVersionControl) = preSolution
-		SccNumberOfProjects = 2
-		SccEnterpriseProvider = {4CA58AB2-18FA-4F8D-95D4-32DDF27D184C}
-		SccTeamFoundationServer = https://tfs.codeplex.com/tfs/tfs07
-		SccLocalPath0 = .
-		SccProjectUniqueName1 = StackWalker_VC2010.vcxproj
-		SccLocalPath1 = .
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug_VC2010|Itanium = Debug_VC2010|Itanium
 		Debug_VC2010|Win32 = Debug_VC2010|Win32

@@ -53,10 +53,14 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{89B2BD42-B130-4811-9043-71A8EBC40DE5}</ProjectGuid>
     <RootNamespace>StackWalker_VC2010</RootNamespace>
-    <SccProjectName>$/stackwalker/Main/StackWalker</SccProjectName>
-    <SccAuxPath>https://tfs.codeplex.com/tfs/tfs07</SccAuxPath>
-    <SccLocalPath>.</SccLocalPath>
-    <SccProvider>{4CA58AB2-18FA-4F8D-95D4-32DDF27D184C}</SccProvider>
+    <SccProjectName>
+    </SccProjectName>
+    <SccAuxPath>
+    </SccAuxPath>
+    <SccLocalPath>
+    </SccLocalPath>
+    <SccProvider>
+    </SccProvider>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />

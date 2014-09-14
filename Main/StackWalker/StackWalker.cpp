@@ -240,15 +240,7 @@ DWORD64
 static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
 {
   if (nMaxDestSize <= 0) return;
-  if (strlen(szSrc) < nMaxDestSize)
-  {
-    strcpy_s(szDest, nMaxDestSize, szSrc);
-  }
-  else
-  {
-    strncpy_s(szDest, nMaxDestSize, szSrc, nMaxDestSize);
-    szDest[nMaxDestSize-1] = 0;
-  }
+  strncpy_s(szDest, nMaxDestSize, szSrc, _TRUNCATE);
 }  // MyStrCpy
 
 // Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
