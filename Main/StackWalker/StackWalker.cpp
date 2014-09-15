@@ -241,6 +241,7 @@ static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
 {
   if (nMaxDestSize <= 0) return;
   strncpy_s(szDest, nMaxDestSize, szSrc, _TRUNCATE);
+  szDest[nMaxDestSize-1] = 0;  // INFO: _TRUNCATE will ensure that it is nul-terminated; but with older compilers (<1400) it uses "strncpy" and this does not!)
 }  // MyStrCpy
 
 // Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
