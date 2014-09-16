@@ -95,9 +95,19 @@ static BOOL PreventSetUnhandledExceptionFilter()
 #error "The following code only works for x86 and x64!"
 #endif
  
+  DWORD dwOldProtect = 0;
+  BOOL bProt = VirtualProtect(pOrgEntry, sizeof(szExecute), 
+    PAGE_EXECUTE_READWRITE, &dwOldProtect);
+
   SIZE_T bytesWritten = 0;
   BOOL bRet = WriteProcessMemory(GetCurrentProcess(),
     pOrgEntry, szExecute, sizeof(szExecute), &bytesWritten);
+
+  if ( (bProt != FALSE) && (dwOldProtect != PAGE_EXECUTE_READWRITE))
+  {
+    DWORD dwBuf;
+    VirtualProtect(pOrgEntry, sizeof(szExecute), dwOldProtect, &dwBuf);
+  }
   return bRet;
 }
 #else
