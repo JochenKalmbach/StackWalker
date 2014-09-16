@@ -72,58 +72,32 @@ void StackWalkTest()
 // and
 // Unhandled exceptions in VC8 and above… for x86 and x64
 // http://blog.kalmbach-software.de/2008/04/02/unhandled-exceptions-in-vc8-and-above-for-x86-and-x64/
+// Even better: http://blog.kalmbach-software.de/2013/05/23/improvedpreventsetunhandledexceptionfilter/
 
 #if defined _M_X64 || defined _M_IX86
-LPTOP_LEVEL_EXCEPTION_FILTER WINAPI 
-  MyDummySetUnhandledExceptionFilter(
-  LPTOP_LEVEL_EXCEPTION_FILTER lpTopLevelExceptionFilter)
-{
-  return NULL;
-}
-
-BOOL PreventSetUnhandledExceptionFilter()
+static BOOL PreventSetUnhandledExceptionFilter()
 {
   HMODULE hKernel32 = LoadLibrary(_T("kernel32.dll"));
   if (hKernel32 == NULL) return FALSE;
-  void *pOrgEntry = GetProcAddress(hKernel32, 
-    "SetUnhandledExceptionFilter");
-  if(pOrgEntry == NULL) return FALSE;
+  void *pOrgEntry = GetProcAddress(hKernel32, "SetUnhandledExceptionFilter");
+  if (pOrgEntry == NULL) return FALSE;
  
-  DWORD dwOldProtect = 0;
-  SIZE_T jmpSize = 5;
-#ifdef _M_X64
-  jmpSize = 13;
-#endif
-  BOOL bProt = VirtualProtect(pOrgEntry, jmpSize, 
-    PAGE_EXECUTE_READWRITE, &dwOldProtect);
-  BYTE newJump[20];
-  void *pNewFunc = &MyDummySetUnhandledExceptionFilter;
 #ifdef _M_IX86
-  DWORD dwOrgEntryAddr = (DWORD) pOrgEntry;
-  dwOrgEntryAddr += jmpSize; // add 5 for 5 op-codes for jmp rel32
-  DWORD dwNewEntryAddr = (DWORD) pNewFunc;
-  DWORD dwRelativeAddr = dwNewEntryAddr - dwOrgEntryAddr;
-  // JMP rel32: Jump near, relative, displacement relative to next instruction.
-  newJump[0] = 0xE9;  // JMP rel32
-  memcpy(&newJump[1], &dwRelativeAddr, sizeof(pNewFunc));
+  // Code for x86:
+  // 33 C0                xor         eax,eax  
+  // C2 04 00             ret         4 
+  unsigned char szExecute[] = { 0x33, 0xC0, 0xC2, 0x04, 0x00 };
 #elif _M_X64
-  newJump[0] = 0x49;  // MOV R15, ...
-  newJump[1] = 0xBF;  // ...
-  memcpy(&newJump[2], &pNewFunc, sizeof (pNewFunc));
-  //pCur += sizeof (ULONG_PTR);
-  newJump[10] = 0x41;  // JMP R15, ...
-  newJump[11] = 0xFF;  // ...
-  newJump[12] = 0xE7;  // ...
+  // 33 C0                xor         eax,eax 
+  // C3                   ret  
+  unsigned char szExecute[] = { 0x33, 0xC0, 0xC3 };
+#else
+#error "The following code only works for x86 and x64!"
 #endif
-  SIZE_T bytesWritten;
-  BOOL bRet = WriteProcessMemory(GetCurrentProcess(),
-    pOrgEntry, newJump, jmpSize, &bytesWritten);
  
-  if (bProt != FALSE)
-  {
-    DWORD dwBuf;
-    VirtualProtect(pOrgEntry, jmpSize, dwOldProtect, &dwBuf);
-  }
+  SIZE_T bytesWritten = 0;
+  BOOL bRet = WriteProcessMemory(GetCurrentProcess(),
+    pOrgEntry, szExecute, sizeof(szExecute), &bytesWritten);
   return bRet;
 }
 #else
