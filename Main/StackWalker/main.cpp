@@ -138,7 +138,11 @@ static LONG __stdcall CrashHandlerExceptionFilter(EXCEPTION_POINTERS* pExPtrs)
      _T("*** Unhandled Exception! See console output for more infos!\n")
      _T("   ExpCode: 0x%8.8X\n")
      _T("   ExpFlags: %d\n")
-     _T("   ExpAddress: 0x%8.8X\n")
+#if _MSC_VER >= 1900
+      _T("   ExpAddress: 0x%8.8p\n")
+#else
+      _T("   ExpAddress: 0x%8.8X\n")
+#endif
      _T("   Please report!"),
      pExPtrs->ExceptionRecord->ExceptionCode,
      pExPtrs->ExceptionRecord->ExceptionFlags,
