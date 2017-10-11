@@ -41,20 +41,22 @@ This also contains the *symsrv.dll* which enables the use of the public Microsof
 
 The usage of the class is very simple. For example if you want to display the callstack of the current thread, just instantiate a `StackWalk` object and call the `ShowCallstack` member:
 
-    #include &lt;windows.h&gt;
-    #include &quot;StackWalker.h&quot;
+```c++
+#include <windows.h>
+#include "StackWalker.h"
 
-    void Func5() { StackWalker sw; sw.ShowCallstack(); }
-    void Func4() { Func5(); }
-    void Func3() { Func4(); }
-    void Func2() { Func3(); }
-    void Func1() { Func2(); }
+void Func5() { StackWalker sw; sw.ShowCallstack(); }
+void Func4() { Func5(); }
+void Func3() { Func4(); }
+void Func2() { Func3(); }
+void Func1() { Func2(); }
 
-    int main()
-    {
-      Func1();
-      return 0;
-    }
+int main()
+{
+    Func1();
+    return 0;
+}
+```
 
 This produces the following output in the debugger-output window:
 
@@ -77,28 +79,33 @@ If you want to direct the output to a file or want to use some other output-mech
 You have two options to do this: only overwrite the `OnOutput` method or overwrite each `OnXxx`-function.
 The first solution (`OnOutput`) is very easy and uses the default-implementation of the other `OnXxx`-functions (which should be enough for most of the cases). To output also to the console, you need to do the following:
 
-    class MyStackWalker : public StackWalker
-    {
-    public:
-      MyStackWalker() : StackWalker() {}
-    protected:
-      virtual void OnOutput(LPCSTR szText)
-        { printf(szText); StackWalker::OnOutput(szText); }
-    };
+```c++
+class MyStackWalker : public StackWalker
+{
+public:
+    MyStackWalker() : StackWalker() {}
+protected:
+    virtual void OnOutput(LPCSTR szText) { 
+        printf(szText); StackWalker::OnOutput(szText); 
+    }
+};
+```
 
 ### Retrieving detailed callstack info
 
 If you want detailed info about the callstack (like loaded-modules, addresses, errors, ...) you can overwrite the corresponding methods. The following methods are provided:
 
-    class StackWalker
-    {
-    protected:
-      virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
-      virtual void OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size,
-        DWORD result, LPCSTR symType, LPCSTR pdbName, ULONGLONG fileVersion);
-      virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &amp;entry);
-      virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
-    };
+```c++
+class StackWalker
+{
+protected:
+    virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
+    virtual void OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size,
+    DWORD result, LPCSTR symType, LPCSTR pdbName, ULONGLONG fileVersion);
+    virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &amp;entry);
+    virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
+};
+```
 
 These methods are called during the generation of the callstack.
 
@@ -106,55 +113,52 @@ These methods are called during the generation of the callstack.
 
 In the constructor of the class, you need to specify if you want to generate callstacks for the current process or for another process. The following constructors are available:
 
-    {
-    public:
-      StackWalker(
-        int options = OptionsAll,
-        LPCSTR szSymPath = NULL,
-        DWORD dwProcessId = GetCurrentProcessId(),
-        HANDLE hProcess = GetCurrentProcess()
-        );
-      // Just for other processes with
-      // default-values for options and symPath
-      StackWalker(
-        DWORD dwProcessId,
-        HANDLE hProcess
-        );
-    };
+```c++
+{
+public:
+    StackWalker(int options = OptionsAll, 
+                LPCSTR szSymPath = NULL, 
+                DWORD dwProcessId = GetCurrentProcessId(), 
+                HANDLE hProcess = GetCurrentProcess());
+    // Just for other processes with
+    // default-values for options and symPath
+    StackWalker(DWORD dwProcessId, HANDLE hProcess);
+};
+```
 
 To do the actual stack-walking you need to call the following functions:
 
-    class StackWalker
-    {
-    public:
-      BOOL ShowCallstack(
-        HANDLE hThread = GetCurrentThread(),
-        CONTEXT *context = NULL,
-        PReadProcessMemoryRoutine readMemoryFunction = NULL,
-        LPVOID pUserData = NULL
-        );
-    };
+```c++
+class StackWalker
+{
+public:
+    BOOL ShowCallstack(HANDLE hThread = GetCurrentThread(), CONTEXT *context = NULL, 
+                       PReadProcessMemoryRoutine readMemoryFunction = NULL, LPVOID pUserData = NULL);
+};
+```
 
 ### Displaying the callstack of an exception
 
 With this `StackWalker` you can also display the callstack inside an exception handler. You only need to write a filter-function which does the stack-walking:
 
-    // The exception filter function:
-    LONG WINAPI ExpFilter(EXCEPTION_POINTERS* pExp, DWORD dwExpCode)
-    {
-      StackWalker sw;
-      sw.ShowCallstack(GetCurrentThread(), pExp-&gt;ContextRecord);
-      return EXCEPTION_EXECUTE_HANDLER;
-    }
+```c++
+// The exception filter function:
+LONG WINAPI ExpFilter(EXCEPTION_POINTERS* pExp, DWORD dwExpCode)
+{
+    StackWalker sw;
+    sw.ShowCallstack(GetCurrentThread(), pExp-&gt;ContextRecord);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
 
-    // This is how to catch an exception:
-    __try
-    {
-      // do some ugly stuff...
-    }
-    __except (ExpFilter(GetExceptionInformation(), GetExceptionCode()))
-    {
-    }
+// This is how to catch an exception:
+__try
+{
+    // do some ugly stuff...
+}
+__except (ExpFilter(GetExceptionInformation(), GetExceptionCode()))
+{
+}
+```
 
 ## Points of Interest
 
@@ -200,8 +204,10 @@ Starting with XP and on x64 and IA64 systems, there is a documented function to 
 
 To do a stack-walking of the current thread, you simply need to do:
 
-      StackWalker sw;
-      sw.ShowCallstack();
+```c++
+    StackWalker sw;
+    sw.ShowCallstack();
+```
 
 ### Walking the callstack of other threads in the same process
 
@@ -210,8 +216,10 @@ But you should be aware that suspending a thread in the same process might lead 
 
 If you have the handle to the thread, you can do the following to retrieve the callstack:
 
+```c++
     MyStackWalker sw;
-    sw.ShowCallstack(hThread);</pre>
+    sw.ShowCallstack(hThread);
+```
 
 For a complete sample to retrieve the callstack of another thread, you can take a look at the demo-project.
 
@@ -279,39 +287,41 @@ Now you either need to initialize the `AddrStack` as well, or provide a valid *`
 
 To do some kind of modification of the behaviour, you can optionally specify some options. Here is the list of the available options:
 
-    typedef enum StackWalkOptions
-    {
-      // No addition info will be retrived
-      // (only the address is available)
-      RetrieveNone = 0,
-  
-      // Try to get the symbol-name
-      RetrieveSymbol = 1,
+```c++
+typedef enum StackWalkOptions
+{
+    // No addition info will be retrived
+    // (only the address is available)
+    RetrieveNone = 0,
 
-      // Try to get the line for this symbol
-      RetrieveLine = 2,
+    // Try to get the symbol-name
+    RetrieveSymbol = 1,
 
-      // Try to retrieve the module-infos
-      RetrieveModuleInfo = 4,
+    // Try to get the line for this symbol
+    RetrieveLine = 2,
 
-      // Also retrieve the version for the DLL/EXE
-      RetrieveFileVersion = 8,
+    // Try to retrieve the module-infos
+    RetrieveModuleInfo = 4,
 
-      // Contains all the abouve
-      RetrieveVerbose = 0xF,
+    // Also retrieve the version for the DLL/EXE
+    RetrieveFileVersion = 8,
 
-      // Generate a &quot;good&quot; symbol-search-path
-      SymBuildPath = 0x10,
+    // Contains all the abouve
+    RetrieveVerbose = 0xF,
 
-      // Also use the public Microsoft-Symbol-Server
-      SymUseSymSrv = 0x20,
+    // Generate a "good" symbol-search-path
+    SymBuildPath = 0x10,
 
-      // Contains all the abouve &quot;Sym&quot;-options
-      SymAll = 0x30,
+    // Also use the public Microsoft-Symbol-Server
+    SymUseSymSrv = 0x20,
 
-      // Contains all options (default)
-      OptionsAll = 0x3F
-    } StackWalkOptions;</pre>
+    // Contains all the abouve "Sym"-options
+    SymAll = 0x30,
+
+    // Contains all options (default)
+    OptionsAll = 0x3F
+} StackWalkOptions;
+```
 
 ## Known issues
 
