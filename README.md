@@ -146,7 +146,7 @@ With this `StackWalker` you can also display the callstack inside an exception h
 LONG WINAPI ExpFilter(EXCEPTION_POINTERS* pExp, DWORD dwExpCode)
 {
     StackWalker sw;
-    sw.ShowCallstack(GetCurrentThread(), pExp-&gt;ContextRecord);
+    sw.ShowCallstack(GetCurrentThread(), pExp->ContextRecord);
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
