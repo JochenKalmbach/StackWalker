@@ -109,7 +109,7 @@ protected:
 
 These methods are called during the generation of the callstack.
 
-### Various kinds of callstacks<
+### Various kinds of callstacks
 
 In the constructor of the class, you need to specify if you want to generate callstacks for the current process or for another process. The following constructors are available:
 
@@ -191,7 +191,7 @@ According to this documentation, most programs only initialize `AddrPC` and `Add
 	4. Set `AddrFrame` to the current frame pointer when meaningful. On x86 this is `Ebp`, on x64 you can use `Rbp` (*but is not used by VC2005B2; instead it uses `Rdi`!*) and on IA64 you can use `RsBSP`. [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) will ignore the value when it isn&#39;t needed for unwinding.
   5. Set `AddrBStore` to `RsBSP` for IA64.
 
-### Walking the callstack of the current thread<
+### Walking the callstack of the current thread
 
 On x86 systems (prior to XP), there is no direct supported function to retrieve the context of the current thread. 
 The recommended way is to throw an exception and catch it. Now you will have a valid context-record. 
