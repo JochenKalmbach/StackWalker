@@ -329,3 +329,4 @@ typedef enum StackWalkOptions
 * Currently only supports ANSI-names in callbacks (of course, the project can be compiled with UNICODE...).
 * To open a remote thread I used `OpenThread` which is not available on NT4/W9x. To have an example of doing this in NT4/Win9x please refer to [Remote Library](http://www.codeproject.com/win32/Remote.asp).
 * Walking mixed-mode callstacks (managed/unmanaged) does only return the unmanaged functions.
+* Doesn't work when debugging with the `/DEBUG:fastlink` [option](https://blogs.msdn.microsoft.com/vcblog/2014/11/12/speeding-up-the-incremental-developer-build-scenario/)
