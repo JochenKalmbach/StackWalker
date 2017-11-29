@@ -8,7 +8,7 @@ so I was pushed to publish the source code on an "easier to modify" platform. Th
 
 But time goes by, and codeplex went away ;)
 
-So I now migrated to GutHub ;)
+So I now migrated to GitHub ;)
 
 # Documentation
 
@@ -41,8 +41,8 @@ This also contains the *symsrv.dll* which enables the use of the public Microsof
 
 The usage of the class is very simple. For example if you want to display the callstack of the current thread, just instantiate a `StackWalk` object and call the `ShowCallstack` member:
 
-    #include &lt;windows.h&gt;
-    #include &quot;StackWalker.h&quot;
+    #include <windows.h>
+    #include "StackWalker.h"
 
     void Func5() { StackWalker sw; sw.ShowCallstack(); }
     void Func4() { Func5(); }
@@ -67,7 +67,7 @@ This produces the following output in the debugger-output window:
     d:\privat\Articles\stackwalker\main.cpp (8): Func1
     d:\privat\Articles\stackwalker\main.cpp (13): main
     f:\vs70builds\3077\vc\crtbld\crt\src\crt0.c (259): mainCRTStartup
-    77E614C7 (kernel32): (filename not available): _BaseProcessStart@4</pre>
+    77E614C7 (kernel32): (filename not available): _BaseProcessStart@4
 
 You can now double-click on a line and the IDE will automatically jump to the desired file/line.
 
@@ -96,7 +96,7 @@ If you want detailed info about the callstack (like loaded-modules, addresses, e
       virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
       virtual void OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size,
         DWORD result, LPCSTR symType, LPCSTR pdbName, ULONGLONG fileVersion);
-      virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &amp;entry);
+      virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &entry);
       virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
     };
 
@@ -211,7 +211,7 @@ But you should be aware that suspending a thread in the same process might lead 
 If you have the handle to the thread, you can do the following to retrieve the callstack:
 
     MyStackWalker sw;
-    sw.ShowCallstack(hThread);</pre>
+    sw.ShowCallstack(hThread);
 
 For a complete sample to retrieve the callstack of another thread, you can take a look at the demo-project.
 
@@ -246,7 +246,7 @@ If you want to use the public symbols for the OS-files from the [Microsoft-Symbo
 
 ### Loading the modules and symbols
 
-To successfully walk the callstack of a thread, *dbghelp.dll* requires that the modules are known by the library. Therefore you need to &quot;register&quot; each module of the process via [`SymLoadModule64`](http://msdn.microsoft.com/library/en-us/debug/base/symloadmodule64.asp). To accomplish this you need to enumerate the modules of the given process.
+To successfully walk the callstack of a thread, *dbghelp.dll* requires that the modules are known by the library. Therefore you need to "register" each module of the process via [`SymLoadModule64`](http://msdn.microsoft.com/library/en-us/debug/base/symloadmodule64.asp). To accomplish this you need to enumerate the modules of the given process.
 
 Starting with Win9x and W2K, it is possible to use the [ToolHelp32-API](http://msdn.microsoft.com/library/en-us/perfmon/base/tool_help_library.asp). You need to make a [snapshot (`CreateToolhelp32Snapshot`)](http://msdn.microsoft.com/library/en-us/perfmon/base/createtoolhelp32snapshot.asp) of the process and then you can enumerate the modules via [Module32First](http://msdn.microsoft.com/library/en-us/perfmon/base/module32first.asp) and [Module32Next](http://msdn.microsoft.com/library/en-us/perfmon/base/module32next.asp). Normally the ToolHelp functions are located in the *kernel32.dll* but on Win9x it is located in a separate DLL: *tlhelp32.dll*. Therefore we need to check the functions in both DLLs.
 
@@ -300,18 +300,18 @@ To do some kind of modification of the behaviour, you can optionally specify som
       // Contains all the abouve
       RetrieveVerbose = 0xF,
 
-      // Generate a &quot;good&quot; symbol-search-path
+      // Generate a "good" symbol-search-path
       SymBuildPath = 0x10,
 
       // Also use the public Microsoft-Symbol-Server
       SymUseSymSrv = 0x20,
 
-      // Contains all the abouve &quot;Sym&quot;-options
+      // Contains all the above "Sym"-options
       SymAll = 0x30,
 
       // Contains all options (default)
       OptionsAll = 0x3F
-    } StackWalkOptions;</pre>
+    } StackWalkOptions;
 
 ## Known issues
 
