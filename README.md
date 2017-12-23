@@ -102,14 +102,14 @@ protected:
     virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
     virtual void OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size,
     DWORD result, LPCSTR symType, LPCSTR pdbName, ULONGLONG fileVersion);
-    virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &amp;entry);
+    virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &entry);
     virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
 };
 ```
 
 These methods are called during the generation of the callstack.
 
-### Various kinds of callstacks<
+### Various kinds of callstacks
 
 In the constructor of the class, you need to specify if you want to generate callstacks for the current process or for another process. The following constructors are available:
 
@@ -146,7 +146,7 @@ With this `StackWalker` you can also display the callstack inside an exception h
 LONG WINAPI ExpFilter(EXCEPTION_POINTERS* pExp, DWORD dwExpCode)
 {
     StackWalker sw;
-    sw.ShowCallstack(GetCurrentThread(), pExp-&gt;ContextRecord);
+    sw.ShowCallstack(GetCurrentThread(), pExp->ContextRecord);
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
@@ -191,7 +191,7 @@ According to this documentation, most programs only initialize `AddrPC` and `Add
 	4. Set `AddrFrame` to the current frame pointer when meaningful. On x86 this is `Ebp`, on x64 you can use `Rbp` (*but is not used by VC2005B2; instead it uses `Rdi`!*) and on IA64 you can use `RsBSP`. [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) will ignore the value when it isn&#39;t needed for unwinding.
   5. Set `AddrBStore` to `RsBSP` for IA64.
 
-### Walking the callstack of the current thread<
+### Walking the callstack of the current thread
 
 On x86 systems (prior to XP), there is no direct supported function to retrieve the context of the current thread. 
 The recommended way is to throw an exception and catch it. Now you will have a valid context-record. 
@@ -329,3 +329,4 @@ typedef enum StackWalkOptions
 * Currently only supports ANSI-names in callbacks (of course, the project can be compiled with UNICODE...).
 * To open a remote thread I used `OpenThread` which is not available on NT4/W9x. To have an example of doing this in NT4/Win9x please refer to [Remote Library](http://www.codeproject.com/win32/Remote.asp).
 * Walking mixed-mode callstacks (managed/unmanaged) does only return the unmanaged functions.
+* Doesn't work when debugging with the `/DEBUG:fastlink` [option](https://blogs.msdn.microsoft.com/vcblog/2014/11/12/speeding-up-the-incremental-developer-build-scenario/)
