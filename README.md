@@ -306,7 +306,7 @@ typedef enum StackWalkOptions
     // Also retrieve the version for the DLL/EXE
     RetrieveFileVersion = 8,
 
-    // Contains all the abouve
+    // Contains all the above
     RetrieveVerbose = 0xF,
 
     // Generate a "good" symbol-search-path
@@ -315,7 +315,7 @@ typedef enum StackWalkOptions
     // Also use the public Microsoft-Symbol-Server
     SymUseSymSrv = 0x20,
 
-    // Contains all the abouve "Sym"-options
+    // Contains all the above "Sym"-options
     SymAll = 0x30,
 
     // Contains all options (default)
