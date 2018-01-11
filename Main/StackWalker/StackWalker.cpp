@@ -651,7 +651,7 @@ private:
     pGMI = (tGMI) GetProcAddress( hPsapi, "GetModuleInformation" );
     if ( (pEPM == NULL) || (pGMFNE == NULL) || (pGMBN == NULL) || (pGMI == NULL) )
     {
-      // we couldn´t find all functions
+      // we couldnï¿½t find all functions
       FreeLibrary(hPsapi);
       return FALSE;
     }
@@ -1305,10 +1305,10 @@ void StackWalker::OnCallstackEntry(CallstackEntryType eType, CallstackEntry &ent
       MyStrCpy(entry.lineFileName, STACKWALK_MAX_NAMELEN, "(filename not available)");
       if (entry.moduleName[0] == 0)
         MyStrCpy(entry.moduleName, STACKWALK_MAX_NAMELEN, "(module-name not available)");
-      _snprintf_s(buffer, STACKWALK_MAX_NAMELEN, "%p (%s): %s: %s\n", (LPVOID) entry.offset, entry.moduleName, entry.lineFileName, entry.name);
+      _snprintf_s(buffer, _TRUNCATE, "%p (%s): %s: %s\n", (LPVOID) entry.offset, entry.moduleName, entry.lineFileName, entry.name);
     }
     else
-      _snprintf_s(buffer, STACKWALK_MAX_NAMELEN, "%s (%d): %s\n", entry.lineFileName, entry.lineNumber, entry.name);
+      _snprintf_s(buffer, _TRUNCATE, "%s (%d): %s\n", entry.lineFileName, entry.lineNumber, entry.name);
     buffer[STACKWALK_MAX_NAMELEN-1] = 0;
     OnOutput(buffer);
   }
