@@ -14,7 +14,7 @@ So I now migrated to GitHub ;)
 
 ## Introduction
 
-In some cases you need to display the callstack of the current thread or your are just interested in the callstack of other threads / processes. Therefore I wrote this project.
+In some cases you need to display the callstack of the current thread or you are just interested in the callstack of other threads / processes. Therefore I wrote this project.
 
 The goal for this project was the following:
 
@@ -186,7 +186,7 @@ According to this documentation, most programs only initialize `AddrPC` and `Add
 * `AddrStack` should always be set to the stack pointer value for all platforms. You can certainly publish that `AddrStack` should be set. You&#39;re also welcome to say that new releases of dbghelp are now requiring this.
 * Given a current dbghelp, your code should:
   1. Always use [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp)
-	2. Always set `AddrPC` to the current instruction pointer (*`Eip on x86, Rip on x64 and StIIP` on IA64*)
+	2. Always set `AddrPC` to the current instruction pointer (*`Eip` on x86, `Rip` on x64 and `StIIP` on IA64*)
   3. Always set `AddrStack` to the current stack pointer (*`Esp` on x86, `Rsp` on x64 and `IntSp` on IA64*)
 	4. Set `AddrFrame` to the current frame pointer when meaningful. On x86 this is `Ebp`, on x64 you can use `Rbp` (*but is not used by VC2005B2; instead it uses `Rdi`!*) and on IA64 you can use `RsBSP`. [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) will ignore the value when it isn&#39;t needed for unwinding.
   5. Set `AddrBStore` to `RsBSP` for IA64.
@@ -200,7 +200,7 @@ If you want to use the *documented* way, then you need to define `CURRENT_THREAD
 But you should be aware of the fact, that `GET_CURRENT_CONTEXT` is a macro which internally uses [`__try __except`](http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vccelng/htm/key_s-z_4.asp). 
 Your function must be able to contain these statements.
 
-Starting with XP and on x64 and IA64 systems, there is a documented function to retrieve the context of the current thread: [RtlCaptureContext](http://msdn.microsoft.com/library/en-us/debug/base/rtlcapturecontext.asp.
+Starting with XP and on x64 and IA64 systems, there is a documented function to retrieve the context of the current thread: [RtlCaptureContext](http://msdn.microsoft.com/library/en-us/debug/base/rtlcapturecontext.asp).
 
 To do a stack-walking of the current thread, you simply need to do:
 
@@ -239,7 +239,7 @@ And this is really time-consuming. Also it is not allowed to access the `StackWa
 
 By default, a symbol-search path (`SymBuildPath` and `SymUseSymSrv`) is provided to the *dbghelp.dll*. This path contains the following directories:
 
-* The optional provided `szSymPath`. If this parameter is provided, the option <code>SymBuildPath</code> is automatically set. Each path must be separated with a &quot;;&quot;
+* The optionally provided `szSymPath`. If this parameter is provided, the option <code>SymBuildPath</code> is automatically set. Each path must be separated with a semi-colon &quot;;&quot;
 * The current directory
 * The directory of the EXE
 * The environment variable `_NT_SYMBOL_PATH`
@@ -250,7 +250,7 @@ By default, a symbol-search path (`SymBuildPath` and `SymUseSymSrv`) is provided
 
 ### Symbol-Server
 
-If you want to use the public symbols for the OS-files from the [Microsoft-Symbol-Server](http://support.microsoft.com/?kbid=311503, you either need the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/ (then *symsrv.dll* and the latest *dbghelp.dll* will be found automatically) or you need to redistribute &quot;*dbghelp.dll*&quot; **and** &quot;*smysrv.dll*&quot; from this package!
+If you want to use the public symbols for the OS-files from the [Microsoft-Symbol-Server](http://support.microsoft.com/?kbid=311503), you either need the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/) (then *symsrv.dll* and the latest *dbghelp.dll* will be found automatically) or you need to redistribute &quot;*dbghelp.dll*&quot; **and** &quot;*smysrv.dll*&quot; from this package!
 
 ### Loading the modules and symbols
 
@@ -266,7 +266,7 @@ There are a couple of issues with *dbghelp.dll*.
 
 * The first is, there are two &quot;teams&quot; at Microsoft which redistribute the <i>dbghelp.dll</i>. One team is the *OS-team*, the other is the *Debugging-Tools-Team* (I don&#39;t know the real names...). In general you can say: The *dbghelp.dll* provided with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/) is the most recent version. 
 One problem of this two teams is the different versioning of the *dbghelp.dll*. For example, for XP-SP1 the version is *5.1.2600.1106* dated *2002-08-29*. The version *6.0.0017.0* which was redistributed from the *debug-team* is dated *2002-04-31*. So there is at least a conflict in the date (the newer version is older). And it is even harder to decide which version is "better" (or has more functionality).
-* Starting with Me/W2K, the *dbghelp.dll*-file in the *system32* protected by the [System File Protection](http://support.microsoft.com/?kbid=222193). So if you want to use a newer *dbghelp.dll* you need to redistribute the version from the *Debugging Tools for Windows*(put it in the same directory as your EXE). 
+* Starting with Me/W2K, the *dbghelp.dll* file in the *system32* directory is protected by the [System File Protection](http://support.microsoft.com/?kbid=222193). So if you want to use a newer *dbghelp.dll* you need to redistribute the version from the *Debugging Tools for Windows* (put it in the same directory as your EXE). 
 This leads to a problem on W2K if you want to walk the callstack for an app which was built using VC7 or later. The VC7 compiler generates a new PDB-format (called [DIA](http://msdn.microsoft.com/library/en-us/diasdk/html/vsoriDebugInterfaceAccessSDK.asp)). 
 This PDB-format cannot be read with the *dbghelp.dll* which is installed with the OS. Therefore you will not get very useful callstacks (or at least with no debugging info like filename, line, function name, ...). To overcome this problem, you need to redistribute a newer *dbghelp.dll*.
 * The *dbghelp.dll* version *6.5.3.7* has a *bug* or at least a *documentation change* of the [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) function. 
@@ -290,17 +290,17 @@ To do some kind of modification of the behaviour, you can optionally specify som
 ```c++
 typedef enum StackWalkOptions
 {
-    // No addition info will be retrived
+    // No additional info will be retrived
     // (only the address is available)
     RetrieveNone = 0,
 
-    // Try to get the symbol-name
+    // Try to get the symbol name
     RetrieveSymbol = 1,
 
     // Try to get the line for this symbol
     RetrieveLine = 2,
 
-    // Try to retrieve the module-infos
+    // Try to retrieve the module info
     RetrieveModuleInfo = 4,
 
     // Also retrieve the version for the DLL/EXE
