@@ -117,6 +117,19 @@ public:
     LPVOID pUserData = NULL  // optional to identify some data in the 'readMemoryFunction'-callback
     );
 
+  UINT CaptureCallstackFast(
+    DWORD64 *callStack,
+    UINT maxDepth,
+    UINT toSkip = 0,
+    HANDLE hThread = GetCurrentThread(),
+    const CONTEXT *context = NULL
+    );
+
+  void PrintCallstack(
+    const DWORD64 *callStack,
+    UINT count
+  );
+
 #if _MSC_VER >= 1300
 // due to some reasons, the "STACKWALK_MAX_NAMELEN" must be declared as "public" 
 // in older compilers in order to use it... starting with VC7 we can declare it as "protected"
@@ -150,6 +163,9 @@ protected:
   virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &entry);
   virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
   virtual void OnOutput(LPCSTR szText);
+
+  // print an individual entry in the callstack
+  void ShowCallstackEntry(DWORD64 offset, CallstackEntryType entryType, CallstackEntry &entry);
 
   StackWalkerInternal *m_sw;
   HANDLE m_hProcess;
