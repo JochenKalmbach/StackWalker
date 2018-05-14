@@ -272,6 +272,16 @@ public:
     pSW = NULL;
     pUDSN = NULL;
     pSGSP = NULL;
+
+    memset(&Symbol, 0, sizeof(Symbol));
+    Symbol.SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+    Symbol.MaxNameLength = StackWalker::STACKWALK_MAX_NAMELEN;
+
+    memset(&Line, 0, sizeof(Line));
+    Line.SizeOfStruct = sizeof(Line);
+
+    memset(&Module, 0, sizeof(Module));
+    Module.SizeOfStruct = sizeof(Module);
   }
   ~StackWalkerInternal()
   {
@@ -460,6 +470,11 @@ typedef struct IMAGEHLP_MODULE64_V2 {
 };
 #pragma pack(pop)
 
+  typedef struct IMAGEHLP_SYMBOL64_WITH_STRING : public IMAGEHLP_SYMBOL64
+  {
+    char NameSpace[StackWalker::STACKWALK_MAX_NAMELEN];
+  };
+
 
   // SymCleanup()
   typedef BOOL (__stdcall *tSC)( IN HANDLE hProcess );
@@ -525,6 +540,9 @@ typedef struct IMAGEHLP_MODULE64_V2 {
   typedef BOOL (__stdcall WINAPI *tSGSP)(HANDLE hProcess, PSTR SearchPath, DWORD SearchPathLength);
   tSGSP pSGSP;
 
+  IMAGEHLP_MODULE64_V3 Module;
+  IMAGEHLP_LINE64 Line;
+  IMAGEHLP_SYMBOL64_WITH_STRING Symbol;
 
 private:
   // **************************************** ToolHelp32 ************************
@@ -637,10 +655,13 @@ private:
     //ModuleEntry e;
     DWORD cbNeeded;
     MODULEINFO mi;
-    HMODULE *hMods = 0;
-    char *tt = NULL;
-    char *tt2 = NULL;
+
     const SIZE_T TTBUFLEN = 8096;
+
+    char hModspace[TTBUFLEN];
+    HMODULE *hMods = (HMODULE*)hModspace;
+    char tt[TTBUFLEN];
+    char tt2[TTBUFLEN];
     int cnt = 0;
 
     hPsapi = LoadLibrary( _T("psapi.dll") );
@@ -657,12 +678,6 @@ private:
       FreeLibrary(hPsapi);
       return FALSE;
     }
-
-    hMods = (HMODULE*) malloc(sizeof(HMODULE) * (TTBUFLEN / sizeof(HMODULE)));
-    tt = (char*) malloc(sizeof(char) * TTBUFLEN);
-    tt2 = (char*) malloc(sizeof(char) * TTBUFLEN);
-    if ( (hMods == NULL) || (tt == NULL) || (tt2 == NULL) )
-      goto cleanup;
 
     if ( ! pEPM( hProcess, hMods, TTBUFLEN, &cbNeeded ) )
     {
@@ -695,9 +710,6 @@ private:
 
   cleanup:
     if (hPsapi != NULL) FreeLibrary(hPsapi);
-    if (tt2 != NULL) free(tt2);
-    if (tt != NULL) free(tt);
-    if (hMods != NULL) free(hMods);
 
     return cnt != 0;
   }  // GetModuleListPSAPI
@@ -745,7 +757,6 @@ private:
       }
 
       // Retrive some additional-infos about the module
-      IMAGEHLP_MODULE64_V3 Module;
       const char *szSymType = "-unknown-";
       if (this->GetModuleInfo(hProcess, baseAddr, &Module) != FALSE)
       {
@@ -810,12 +821,7 @@ public:
     }
     // First try to use the larger ModuleInfo-Structure
     pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
-    void *pData = malloc(4096); // reserve enough memory, so the bug in v6.3.5.1 does not lead to memory-overwrites...
-    if (pData == NULL)
-    {
-      SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-      return FALSE;
-    }
+    char pData[4096]; // reserve enough memory, so the bug in v6.3.5.1 does not lead to memory-overwrites...
     memcpy(pData, pModuleInfo, sizeof(IMAGEHLP_MODULE64_V3));
     static bool s_useV3Version = true;
     if (s_useV3Version)
@@ -825,7 +831,6 @@ public:
         // only copy as much memory as is reserved...
         memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V3));
         pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
-        free(pData);
         return TRUE;
       }
       s_useV3Version = false;  // to prevent unneccessarry calls with the larger struct...
@@ -839,10 +844,8 @@ public:
       // only copy as much memory as is reserved...
       memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V2));
       pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
-      free(pData);
       return TRUE;
     }
-    free(pData);
     SetLastError(ERROR_DLL_INIT_FAILED);
     return FALSE;
   }
@@ -854,7 +857,6 @@ StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
   this->m_options = OptionsAll;
   this->m_modulesLoaded = FALSE;
   this->m_hProcess = hProcess;
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
   this->m_dwProcessId = dwProcessId;
   this->m_szSymPath = NULL;
   this->m_MaxRecursionCount = 1000;
@@ -864,7 +866,6 @@ StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDL
   this->m_options = options;
   this->m_modulesLoaded = FALSE;
   this->m_hProcess = hProcess;
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
   this->m_dwProcessId = dwProcessId;
   if (szSymPath != NULL)
   {
@@ -888,25 +889,22 @@ StackWalker::~StackWalker()
 
 BOOL StackWalker::LoadModules()
 {
+  if (m_modulesLoaded != FALSE)
+    return TRUE;
+
+  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
+
   if (this->m_sw == NULL)
   {
     SetLastError(ERROR_DLL_INIT_FAILED);
     return FALSE;
   }
-  if (m_modulesLoaded != FALSE)
-    return TRUE;
 
   // Build the sym-path:
-  char *szSymPath = NULL;
+  const int nSymPathLen = 4096;
+  char szSymPath[nSymPathLen];
   if ( (this->m_options & SymBuildPath) != 0)
   {
-    const size_t nSymPathLen = 4096;
-    szSymPath = (char*) malloc(nSymPathLen);
-    if (szSymPath == NULL)
-    {
-      SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-      return FALSE;
-    }
     szSymPath[0] = 0;
     // Now first add the (optional) provided sympath:
     if (this->m_szSymPath != NULL)
@@ -986,7 +984,6 @@ BOOL StackWalker::LoadModules()
 
   // First Init the whole stuff...
   BOOL bRet = this->m_sw->Init(szSymPath);
-  if (szSymPath != NULL) free(szSymPath); szSymPath = NULL;
   if (bRet == FALSE)
   {
     this->OnDbgHelpErr("Error while initializing dbghelp.dll", 0, 0);
@@ -1011,13 +1008,9 @@ static LPVOID s_readMemoryFunction_UserData = NULL;
 BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadProcessMemoryRoutine readMemoryFunction, LPVOID pUserData)
 {
   CONTEXT c;
-  CallstackEntry csEntry;
-  IMAGEHLP_SYMBOL64 *pSym = NULL;
-  StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
-  IMAGEHLP_LINE64 Line;
-  int frameNum;
-  bool bLastEntryCalled = true;
+  UINT frameNum;
   int curRecursionCount = 0;
+  BOOL bLastEntryCalled = true;
 
   if (m_modulesLoaded == FALSE)
     this->LoadModules();  // ignore the result...
@@ -1099,17 +1092,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
 #error "Platform not supported!"
 #endif
 
-  pSym = (IMAGEHLP_SYMBOL64 *) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  if (!pSym) goto cleanup;  // not enough memory...
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
-
-  memset(&Line, 0, sizeof(Line));
-  Line.SizeOfStruct = sizeof(Line);
-
-  memset(&Module, 0, sizeof(Module));
-  Module.SizeOfStruct = sizeof(Module);
+  CallstackEntry lastEntryCopy;
 
   for (frameNum = 0; ; ++frameNum )
   {
@@ -1125,16 +1108,6 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
       break;
     }
 
-    csEntry.offset = s.AddrPC.Offset;
-    csEntry.name[0] = 0;
-    csEntry.undName[0] = 0;
-    csEntry.undFullName[0] = 0;
-    csEntry.offsetFromSmybol = 0;
-    csEntry.offsetFromLine = 0;
-    csEntry.lineFileName[0] = 0;
-    csEntry.lineNumber = 0;
-    csEntry.loadedImageName[0] = 0;
-    csEntry.moduleName[0] = 0;
     if (s.AddrPC.Offset == s.AddrReturn.Offset)
     {
       if ( (this->m_MaxRecursionCount > 0) && (curRecursionCount > m_MaxRecursionCount) )
@@ -1146,111 +1119,120 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
     }
     else
       curRecursionCount = 0;
-    if (s.AddrPC.Offset != 0)
-    {
-      // we seem to have a valid PC
-      // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol), pSym) != FALSE)
-      {
-        MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
-        // UnDecorateSymbolName()
-        this->m_sw->pUDSN( pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY );
-        this->m_sw->pUDSN( pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE );
-      }
-      else
-      {
-        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), s.AddrPC.Offset);
-      }
 
-      // show line number info, NT5.0-method (SymGetLineFromAddr64())
-      if (this->m_sw->pSGLFA != NULL )
-      { // yes, we have SymGetLineFromAddr64()
-        if (this->m_sw->pSGLFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromLine), &Line) != FALSE)
-        {
-          csEntry.lineNumber = Line.LineNumber;
-          MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, Line.FileName);
-        }
-        else
-        {
-          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), s.AddrPC.Offset);
-        }
-      } // yes, we have SymGetLineFromAddr64()
-
-      // show module info (SymGetModuleInfo64())
-      if (this->m_sw->GetModuleInfo(this->m_hProcess, s.AddrPC.Offset, &Module ) != FALSE)
-      { // got module info OK
-        switch ( Module.SymType )
-        {
-        case SymNone:
-          csEntry.symTypeString = "-nosymbols-";
-          break;
-        case SymCoff:
-          csEntry.symTypeString = "COFF";
-          break;
-        case SymCv:
-          csEntry.symTypeString = "CV";
-          break;
-        case SymPdb:
-          csEntry.symTypeString = "PDB";
-          break;
-        case SymExport:
-          csEntry.symTypeString = "-exported-";
-          break;
-        case SymDeferred:
-          csEntry.symTypeString = "-deferred-";
-          break;
-        case SymSym:
-          csEntry.symTypeString = "SYM";
-          break;
-#if API_VERSION_NUMBER >= 9
-        case SymDia:
-          csEntry.symTypeString = "DIA";
-          break;
-#endif
-        case 8: //SymVirtual:
-          csEntry.symTypeString = "Virtual";
-          break;
-        default:
-          //_snprintf( ty, sizeof(ty), "symtype=%ld", (long) Module.SymType );
-          csEntry.symTypeString = NULL;
-          break;
-        }
-
-        MyStrCpy(csEntry.moduleName, STACKWALK_MAX_NAMELEN, Module.ModuleName);
-        csEntry.baseOfImage = Module.BaseOfImage;
-        MyStrCpy(csEntry.loadedImageName, STACKWALK_MAX_NAMELEN, Module.LoadedImageName);
-      } // got module info OK
-      else
-      {
-        this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), s.AddrPC.Offset);
-      }
-    } // we seem to have a valid PC
-
-    CallstackEntryType et = nextEntry;
     if (frameNum == 0)
-      et = firstEntry;
+    {
+      ShowCallstackEntry(s.AddrPC.Offset, firstEntry, lastEntryCopy);
+    }
+    else
+    {
+      ShowCallstackEntry(s.AddrPC.Offset, nextEntry, lastEntryCopy);
+    }
     bLastEntryCalled = false;
-    this->OnCallstackEntry(et, csEntry);
-    
+
     if (s.AddrReturn.Offset == 0)
     {
       bLastEntryCalled = true;
-      this->OnCallstackEntry(lastEntry, csEntry);
+      this->OnCallstackEntry(lastEntry, lastEntryCopy);
       SetLastError(ERROR_SUCCESS);
       break;
     }
   } // for ( frameNum )
 
-  cleanup:
-    if (pSym) free( pSym );
-
   if (bLastEntryCalled == false)
-      this->OnCallstackEntry(lastEntry, csEntry);
+    this->OnCallstackEntry(lastEntry, lastEntryCopy);
 
   if (context == NULL)
     ResumeThread(hThread);
 
   return TRUE;
+}
+
+UINT StackWalker::CaptureCallstackFast(DWORD64* callStack, UINT maxDepth, UINT toSkip, HANDLE hThread, const CONTEXT *context)
+{
+  CONTEXT c;
+  DWORD64 imageBase;
+  PVOID handlerData;
+  DWORD64 establisherFrame;
+  PRUNTIME_FUNCTION pFunctionEntry;
+  UINT frameNum;
+
+  if (context == NULL)
+  {
+    // If no context is provided, capture the context
+    // See: https://stackwalker.codeplex.com/discussions/446958
+#if _WIN32_WINNT <= 0x0501
+    // If we need to support XP, we need to use the "old way", because "GetThreadId" is not available!
+    if (hThread == GetCurrentThread())
+#else
+    if (GetThreadId(hThread) == GetCurrentThreadId())
+#endif
+    {
+      GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, USED_CONTEXT_FLAGS);
+    }
+    else
+    {
+      SuspendThread(hThread);
+      memset(&c, 0, sizeof(CONTEXT));
+      c.ContextFlags = USED_CONTEXT_FLAGS;
+
+      // TODO: Detect if you want to get a thread context of a different process, which is running a different processor architecture...
+      // This does only work if we are x64 and the target process is x64 or x86;
+      // It cannnot work, if this process is x64 and the target process is x64... this is not supported...
+      // See also: http://www.howzatt.demon.co.uk/articles/DebuggingInWin64.html
+      if (GetThreadContext(hThread, &c) == FALSE)
+      {
+        ResumeThread(hThread);
+        return 0;
+      }
+    }
+  }
+  else
+    c = *context;
+
+  for (frameNum = 0; frameNum < maxDepth + toSkip; ++frameNum)
+  {
+    pFunctionEntry = RtlLookupFunctionEntry(c.Rip, &imageBase, NULL);
+
+    if (pFunctionEntry == NULL)
+    {
+      break;
+    }
+
+    RtlVirtualUnwind(UNW_FLAG_NHANDLER,
+      imageBase,
+      c.Rip,
+      pFunctionEntry,
+      &c,
+      &handlerData,
+      &establisherFrame,
+      NULL);
+
+    if (frameNum >= toSkip)
+    {
+      callStack[frameNum - toSkip] = c.Rip;
+    }
+  } // for ( frameNum )
+
+  if (context == NULL)
+    ResumeThread(hThread);
+
+  return (frameNum - toSkip);
+}
+
+void StackWalker::PrintCallstack(DWORD64 const* callStack, UINT count)
+{
+	if (count == 0)
+		return;
+
+	CallstackEntry lastEntryCopy;
+
+	ShowCallstackEntry(callStack[0], firstEntry, lastEntryCopy);
+
+	for (UINT i = 1; i < count; ++i)
+		ShowCallstackEntry(callStack[i], nextEntry, lastEntryCopy);
+
+	this->OnCallstackEntry(lastEntry, lastEntryCopy);
 }
 
 BOOL __stdcall StackWalker::myReadProcMem(
@@ -1385,4 +1367,100 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
 void StackWalker::OnOutput(LPCSTR buffer)
 {
   OutputDebugStringA(buffer);
+}
+
+void StackWalker::ShowCallstackEntry(DWORD64 offset, StackWalker::CallstackEntryType entryType, StackWalker::CallstackEntry& csEntry)
+{
+  csEntry.offset = offset;
+  csEntry.name[0] = 0;
+  csEntry.undName[0] = 0;
+  csEntry.undFullName[0] = 0;
+  csEntry.offsetFromSmybol = 0;
+  csEntry.offsetFromLine = 0;
+  csEntry.lineFileName[0] = 0;
+  csEntry.lineNumber = 0;
+  csEntry.loadedImageName[0] = 0;
+  csEntry.moduleName[0] = 0;
+
+  if (csEntry.offset != 0)
+  {
+    // we seem to have a valid PC
+    // show procedure info (SymGetSymFromAddr64())
+    if (this->m_sw->pSGSFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromSmybol), &this->m_sw->Symbol) != FALSE)
+    {
+      MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, this->m_sw->Symbol.Name);
+      // UnDecorateSymbolName()
+      this->m_sw->pUDSN(this->m_sw->Symbol.Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY);
+      this->m_sw->pUDSN(this->m_sw->Symbol.Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE);
+    }
+    else
+    {
+      this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), csEntry.offset);
+    }
+
+    // show line number info, NT5.0-method (SymGetLineFromAddr64())
+    if (this->m_sw->pSGLFA != NULL)
+    { // yes, we have SymGetLineFromAddr64()
+      if (this->m_sw->pSGLFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromLine), &this->m_sw->Line) != FALSE)
+      {
+        csEntry.lineNumber = this->m_sw->Line.LineNumber;
+        MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, this->m_sw->Line.FileName);
+      }
+      else
+      {
+        this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), csEntry.offset);
+      }
+    } // yes, we have SymGetLineFromAddr64()
+
+    // show module info (SymGetModuleInfo64())
+    if (this->m_sw->GetModuleInfo(this->m_hProcess, offset, &this->m_sw->Module) != FALSE)
+    { // got module info OK
+      switch (this->m_sw->Module.SymType)
+      {
+      case SymNone:
+        csEntry.symTypeString = "-nosymbols-";
+        break;
+      case SymCoff:
+        csEntry.symTypeString = "COFF";
+        break;
+      case SymCv:
+        csEntry.symTypeString = "CV";
+        break;
+      case SymPdb:
+        csEntry.symTypeString = "PDB";
+        break;
+      case SymExport:
+        csEntry.symTypeString = "-exported-";
+        break;
+      case SymDeferred:
+        csEntry.symTypeString = "-deferred-";
+        break;
+      case SymSym:
+        csEntry.symTypeString = "SYM";
+        break;
+#if API_VERSION_NUMBER >= 9
+      case SymDia:
+        csEntry.symTypeString = "DIA";
+        break;
+#endif
+      case 8: //SymVirtual:
+        csEntry.symTypeString = "Virtual";
+        break;
+      default:
+        //_snprintf( ty, sizeof(ty), "symtype=%ld", (long) this->m_sw->Module.SymType );
+        csEntry.symTypeString = NULL;
+        break;
+      }
+
+      MyStrCpy(csEntry.moduleName, STACKWALK_MAX_NAMELEN, this->m_sw->Module.ModuleName);
+      csEntry.baseOfImage = this->m_sw->Module.BaseOfImage;
+      MyStrCpy(csEntry.loadedImageName, STACKWALK_MAX_NAMELEN, this->m_sw->Module.LoadedImageName);
+    } // got module info OK
+    else
+    {
+      this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), csEntry.offset);
+    }
+  } // we seem to have a valid PC
+
+  this->OnCallstackEntry(entryType, csEntry);
 }

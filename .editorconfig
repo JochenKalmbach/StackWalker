@@ -1,0 +1,7 @@
+# top-most EditorConfig file
+root = true
+
+# windows-style newlines with a newline ending every file
+[*]
+indent_style = space
+indent_size = 2
