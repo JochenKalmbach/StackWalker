@@ -117,6 +117,11 @@ public:
     LPVOID pUserData = NULL  // optional to identify some data in the 'readMemoryFunction'-callback
     );
 
+  BOOL ShowObject(
+    LPVOID pObject
+    );
+
+
 #if _MSC_VER >= 1300
 // due to some reasons, the "STACKWALK_MAX_NAMELEN" must be declared as "public" 
 // in older compilers in order to use it... starting with VC7 we can declare it as "protected"
