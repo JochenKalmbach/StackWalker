@@ -1255,33 +1255,38 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
 
 BOOL StackWalker::ShowObject(LPVOID pObject)
 {
-	if (m_modulesLoaded == FALSE)
-		this->LoadModules();  // ignore the result...
+  // Load modules if not done yet
+  if (m_modulesLoaded == FALSE)
+    this->LoadModules();  // ignore the result...
 
-	if (this->m_sw->m_hDbhHelp == NULL)
-	{
-		SetLastError(ERROR_DLL_INIT_FAILED);
-		return FALSE;
-	}
+  // Verify that the DebugHelp.dll was actually found
+  if (this->m_sw->m_hDbhHelp == NULL)
+  {
+    SetLastError(ERROR_DLL_INIT_FAILED);
+    return FALSE;
+  }
 
-	if (this->m_sw->pSGSFA == NULL)
-		return FALSE;
+  // SymGetSymFromAddr64() is required
+  if (this->m_sw->pSGSFA == NULL)
+    return FALSE;
 
-	DWORD64 dwAddress = DWORD64(pObject);
-	DWORD64 dwDisplacement = 0;
-	IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64 *) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-	memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-	pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-	pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
-	if (this->m_sw->pSGSFA(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
-	{
-		this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), dwAddress);
-		return FALSE;
-	}
-	this->OnOutput(pSym->Name);
+  // Show object info (SymGetSymFromAddr64())
+  DWORD64 dwAddress = DWORD64(pObject);
+  DWORD64 dwDisplacement = 0;
+  IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64 *) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
+  if (this->m_sw->pSGSFA(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
+  {
+    this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), dwAddress);
+    return FALSE;
+  }
+  // Object name output
+  this->OnOutput(pSym->Name);
 
-	free(pSym);
-	return TRUE;
+  free(pSym);
+  return TRUE;
 };
 
 BOOL __stdcall StackWalker::myReadProcMem(

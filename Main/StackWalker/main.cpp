@@ -25,6 +25,9 @@
 #define strcpy_s(a, b, c) strcpy(a, c)
 #endif
 
+int iGlobalInt = 0;
+void (*pGlobalFuncPtr)() = 0;
+
 
 // Specialized stackwalker-output classes
 // Console (printf):
@@ -62,6 +65,18 @@ void Func1()
 void StackWalkTest()
 {
   Func1();
+}
+
+void GlobalIntTest()
+{
+	StackWalkerToConsole sw;
+	sw.ShowObject(&iGlobalInt);
+}
+
+void GlobalFunctionPointerTest()
+{
+	StackWalkerToConsole sw;
+	sw.ShowObject(&pGlobalFuncPtr);
 }
 
 #ifdef UNHANDLED_EXCEPTION_TEST
@@ -205,6 +220,12 @@ int f(int i)
 
 int _tmain(int argc, _TCHAR* argv[])
 {
+  printf("\n\n\nShow an object:\n\n\n");
+  GlobalIntTest();
+
+  printf("\n\n\nShow a function pointer:\n\n\n");
+  GlobalFunctionPointerTest();
+
   printf("\n\n\nShow a simple callstack of the current thread:\n\n\n");
   StackWalkTest();
 
