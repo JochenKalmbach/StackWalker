@@ -128,6 +128,11 @@ public:
 protected:
 #endif
 	enum { STACKWALK_MAX_NAMELEN = 1024 }; // max name length for found symbols
+#ifdef _M_IX86
+	enum { STACKWALK_INTERNAL_SIZE = 68 }; // size of StackWalkerInternal in 32bit
+#else
+	enum { STACKWALK_INTERNAL_SIZE = 136 }; // size of StackWalkerInternal in 64 bit
+#endif
 
 protected:
   // Entry for each Callstack-Entry
@@ -156,6 +161,7 @@ protected:
   virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
   virtual void OnOutput(LPCSTR szText);
 
+  DWORD64 m_dwSwPlaceHolder[(STACKWALK_INTERNAL_SIZE / sizeof(DWORD64)) + 1];
   StackWalkerInternal *m_sw;
   HANDLE m_hProcess;
   DWORD m_dwProcessId;
