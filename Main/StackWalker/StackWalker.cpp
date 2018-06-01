@@ -637,9 +637,6 @@ private:
     //ModuleEntry e;
     DWORD cbNeeded;
     MODULEINFO mi;
-    HMODULE *hMods = 0;
-    char *tt = NULL;
-    char *tt2 = NULL;
     const SIZE_T TTBUFLEN = 8096;
     int cnt = 0;
 
@@ -658,11 +655,9 @@ private:
       return FALSE;
     }
 
-    hMods = (HMODULE*) malloc(sizeof(HMODULE) * (TTBUFLEN / sizeof(HMODULE)));
-    tt = (char*) malloc(sizeof(char) * TTBUFLEN);
-    tt2 = (char*) malloc(sizeof(char) * TTBUFLEN);
-    if ( (hMods == NULL) || (tt == NULL) || (tt2 == NULL) )
-      goto cleanup;
+    HMODULE hMods [TTBUFLEN / sizeof(HMODULE)];
+	char tt[TTBUFLEN];
+	char tt2[TTBUFLEN];
 
     if ( ! pEPM( hProcess, hMods, TTBUFLEN, &cbNeeded ) )
     {
@@ -695,9 +690,6 @@ private:
 
   cleanup:
     if (hPsapi != NULL) FreeLibrary(hPsapi);
-    if (tt2 != NULL) free(tt2);
-    if (tt != NULL) free(tt);
-    if (hMods != NULL) free(hMods);
 
     return cnt != 0;
   }  // GetModuleListPSAPI
@@ -717,29 +709,30 @@ private:
     ULONGLONG fileVersion = 0;
     if ( (m_parent != NULL) && (szImg != NULL) )
     {
-      // try to retrive the file-version:
+      // try to retrieve the file-version:
       if ( (this->m_parent->m_options & StackWalker::RetrieveFileVersion) != 0)
       {
-        VS_FIXEDFILEINFO *fInfo = NULL;
         DWORD dwHandle;
-        DWORD dwSize = GetFileVersionInfoSizeA(szImg, &dwHandle);
-        if (dwSize > 0)
+        DWORD dwInfoSize = GetFileVersionInfoSizeA(szImg, &dwHandle);
+        if (dwInfoSize > 0)
         {
-          LPVOID vData = malloc(dwSize);
-          if (vData != NULL)
+          static const DWORD dwInfoSizeMax = 4096;
+          DWORD64 dwInfoData[dwInfoSizeMax / sizeof(DWORD64)];
+          if (dwInfoSize < dwInfoSizeMax)
           {
-            if (GetFileVersionInfoA(szImg, dwHandle, dwSize, vData) != 0)
+            dwInfoSize = dwInfoSizeMax;
+          }
+          if (GetFileVersionInfoA(szImg, dwHandle, dwInfoSize, dwInfoData) != 0)
+          {
+            TCHAR szSubBlock[] = _T("\\");
+            VS_FIXEDFILEINFO *fInfo = NULL;
+            UINT len;
+            if (VerQueryValue(dwInfoData, szSubBlock, (LPVOID*) &fInfo, &len) == 0)
+              fInfo = NULL;
+            else
             {
-              UINT len;
-              TCHAR szSubBlock[] = _T("\\");
-              if (VerQueryValue(vData, szSubBlock, (LPVOID*) &fInfo, &len) == 0)
-                fInfo = NULL;
-              else
-              {
-                fileVersion = ((ULONGLONG)fInfo->dwFileVersionLS) + ((ULONGLONG)fInfo->dwFileVersionMS << 32);
-              }
+              fileVersion = ((ULONGLONG)fInfo->dwFileVersionLS) + ((ULONGLONG)fInfo->dwFileVersionMS << 32);
             }
-            free(vData);
           }
         }
       }
@@ -800,7 +793,7 @@ public:
   }
 
 
-  BOOL GetModuleInfo(HANDLE hProcess, DWORD64 baseAddr, IMAGEHLP_MODULE64_V3 *pModuleInfo)
+  BOOL GetModuleInfo(HANDLE hProcess, DWORD64 dwBaseAddr, IMAGEHLP_MODULE64_V3 *pModuleInfo)
   {
     memset(pModuleInfo, 0, sizeof(IMAGEHLP_MODULE64_V3));
     if(this->pSGMI == NULL)
@@ -810,7 +803,8 @@ public:
     }
     // First try to use the larger ModuleInfo-Structure
     pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
-    void *pData = malloc(4096); // reserve enough memory, so the bug in v6.3.5.1 does not lead to memory-overwrites...
+	char data[4096]; // reserve enough memory, so the bug in v6.3.5.1 does not lead to memory-overwrites...
+    void *pData = data;
     if (pData == NULL)
     {
       SetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -820,12 +814,11 @@ public:
     static bool s_useV3Version = true;
     if (s_useV3Version)
     {
-      if (this->pSGMI(hProcess, baseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
+      if (this->pSGMI(hProcess, dwBaseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
       {
         // only copy as much memory as is reserved...
         memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V3));
         pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V3);
-        free(pData);
         return TRUE;
       }
       s_useV3Version = false;  // to prevent unneccessarry calls with the larger struct...
@@ -834,15 +827,13 @@ public:
     // could not retrive the bigger structure, try with the smaller one (as defined in VC7.1)...
     pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
     memcpy(pData, pModuleInfo, sizeof(IMAGEHLP_MODULE64_V2));
-    if (this->pSGMI(hProcess, baseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
+    if (this->pSGMI(hProcess, dwBaseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
     {
       // only copy as much memory as is reserved...
       memcpy(pModuleInfo, pData, sizeof(IMAGEHLP_MODULE64_V2));
       pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
-      free(pData);
       return TRUE;
     }
-    free(pData);
     SetLastError(ERROR_DLL_INIT_FAILED);
     return FALSE;
   }
@@ -851,20 +842,28 @@ public:
 // #############################################################
 StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
 {
+  // Initialize internal from its place holder
+  StackWalkerInternal* sw = (StackWalkerInternal*)m_dwSwPlaceHolder;
+  sw->StackWalkerInternal::StackWalkerInternal(this, hProcess);
+
   this->m_options = OptionsAll;
   this->m_modulesLoaded = FALSE;
   this->m_hProcess = hProcess;
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
+  this->m_sw = sw;
   this->m_dwProcessId = dwProcessId;
   this->m_szSymPath = NULL;
   this->m_MaxRecursionCount = 1000;
 }
 StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess)
 {
+  // Initialize internal from its place holder
+  StackWalkerInternal* sw = (StackWalkerInternal*)m_dwSwPlaceHolder;
+  sw->StackWalkerInternal::StackWalkerInternal(this, hProcess);
+
   this->m_options = options;
   this->m_modulesLoaded = FALSE;
   this->m_hProcess = hProcess;
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
+  this->m_sw = sw;
   this->m_dwProcessId = dwProcessId;
   if (szSymPath != NULL)
   {
@@ -881,8 +880,6 @@ StackWalker::~StackWalker()
   if (m_szSymPath != NULL)
     free(m_szSymPath);
   m_szSymPath = NULL;
-  if (this->m_sw != NULL)
-    delete this->m_sw;
   this->m_sw = NULL;
 }
 
@@ -897,11 +894,10 @@ BOOL StackWalker::LoadModules()
     return TRUE;
 
   // Build the sym-path:
-  char *szSymPath = NULL;
+  static const size_t nSymPathLen = 4096;
+  char szSymPath [nSymPathLen];
   if ( (this->m_options & SymBuildPath) != 0)
   {
-    const size_t nSymPathLen = 4096;
-    szSymPath = (char*) malloc(nSymPathLen);
     if (szSymPath == NULL)
     {
       SetLastError(ERROR_NOT_ENOUGH_MEMORY);
@@ -986,7 +982,6 @@ BOOL StackWalker::LoadModules()
 
   // First Init the whole stuff...
   BOOL bRet = this->m_sw->Init(szSymPath);
-  if (szSymPath != NULL) free(szSymPath); szSymPath = NULL;
   if (bRet == FALSE)
   {
     this->OnDbgHelpErr("Error while initializing dbghelp.dll", 0, 0);
@@ -1012,7 +1007,6 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
 {
   CONTEXT c;
   CallstackEntry csEntry;
-  IMAGEHLP_SYMBOL64 *pSym = NULL;
   StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
   IMAGEHLP_LINE64 Line;
   int frameNum;
@@ -1099,9 +1093,10 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
 #error "Platform not supported!"
 #endif
 
-  pSym = (IMAGEHLP_SYMBOL64 *) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  if (!pSym) goto cleanup;  // not enough memory...
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  static const size_t s_symSize = sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN;
+  DWORD64 symPlaceHolder[s_symSize];
+  IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64*)symPlaceHolder;
+  memset(pSym, 0, s_symSize);
   pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
@@ -1241,9 +1236,6 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
     }
   } // for ( frameNum )
 
-  cleanup:
-    if (pSym) free( pSym );
-
   if (bLastEntryCalled == false)
       this->OnCallstackEntry(lastEntry, csEntry);
 
@@ -1273,7 +1265,9 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   // Show object info (SymGetSymFromAddr64())
   DWORD64 dwAddress = DWORD64(pObject);
   DWORD64 dwDisplacement = 0;
-  IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64 *) malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  static const size_t s_symSize = sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN;
+  DWORD64 symPlaceHolder[s_symSize];
+  IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64*)symPlaceHolder;
   memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
   pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
@@ -1285,7 +1279,6 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   // Object name output
   this->OnOutput(pSym->Name);
 
-  free(pSym);
   return TRUE;
 };
 
