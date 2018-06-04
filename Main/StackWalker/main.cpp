@@ -26,7 +26,10 @@
 #endif
 
 int iGlobalInt = 0;
+float* GlobalFunc(int) { return NULL; }
 void (*pGlobalFuncPtr)() = 0;
+class Foo { public: virtual ~Foo() {} };
+
 
 
 // Specialized stackwalker-output classes
@@ -77,6 +80,20 @@ void GlobalFunctionPointerTest()
 {
 	StackWalkerToConsole sw;
 	sw.ShowObject(&pGlobalFuncPtr);
+}
+
+void GlobalFunctionTest()
+{
+	StackWalkerToConsole sw;
+	sw.ShowObject(&GlobalFunc);
+}
+
+void VTableTest()
+{
+	Foo obj;
+	void* pFooVTable = *(void**)&obj;
+	StackWalkerToConsole sw;
+	sw.ShowObject(pFooVTable);
 }
 
 #ifdef UNHANDLED_EXCEPTION_TEST
@@ -225,6 +242,12 @@ int _tmain(int argc, _TCHAR* argv[])
 
   printf("\n\n\nShow a function pointer:\n\n\n");
   GlobalFunctionPointerTest();
+
+  printf("\n\n\nShow a function:\n\n\n");
+  GlobalFunctionTest();
+
+  printf("\n\n\nShow a vtable:\n\n\n");
+  VTableTest();
 
   printf("\n\n\nShow a simple callstack of the current thread:\n\n\n");
   StackWalkTest();

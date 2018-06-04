@@ -1282,8 +1282,27 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
     this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), dwAddress);
     return FALSE;
   }
+  CHAR* name = pSym->Name;
+  // In case of a function, decorated name is placed inside parenthesis, e.g. "ILT+12560(?GlobalFuncYAPAMHZ)"
+  CHAR nameDec [STACKWALK_MAX_NAMELEN];
+  CHAR* pParenthOpen = strchr(name, '(');
+  CHAR* pParenthClose = strchr(name, ')');
+  if (pParenthOpen && pParenthClose && (pParenthOpen < pParenthClose))
+  {
+    // Isolate the actual decorated function name, e.g. "GlobalFuncYAPAMHZ"
+    ++pParenthOpen;
+    if (*pParenthOpen == '?')
+    {
+      ++pParenthOpen;
+    }
+    size_t iDecNameLength = pParenthClose - pParenthOpen;
+    MyStrCpy(nameDec, STACKWALK_MAX_NAMELEN, pParenthOpen);
+    nameDec[iDecNameLength] = 0;
+    name = nameDec;
+    // Could not find a mean to get the undecorated function name, e.g. "GlobalFunc"
+  }
   // Object name output
-  this->OnOutput(pSym->Name);
+  this->OnOutput(name);
 
   free(pSym);
   return TRUE;
