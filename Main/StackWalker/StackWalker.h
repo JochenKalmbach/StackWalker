@@ -36,7 +36,23 @@
 // so we need not to check the version (because we only support _MSC_VER >= 1100)!
 #pragma once
 
-#include <windows.h>
+// include all it - bad way
+//#include <windows.h>
+
+// better include needed parts
+#include <windef.h>
+#include <WinBase.h>
+#include <stdlib.h>
+
+// and undef annoying defines
+#undef GetFreeSpace
+#undef CREATE_NEW
+#undef min
+#undef max
+#undef ERROR_UNHANDLED_EXCEPTION
+#undef CreateDirectory
+#undef DeleteFile
+// ... undef more if need 
 
 #if _MSC_VER >= 1900
 #pragma warning(disable : 4091)
