@@ -1,3 +1,8 @@
+#ifndef __STACKWALKER_H__
+#define __STACKWALKER_H__
+
+#if defined(_MSC_VER)
+
 /**********************************************************************
  * 
  * StackWalker.h
@@ -221,3 +226,7 @@ protected:
     RtlCaptureContext(&c); \
 } while(0);
 #endif
+
+#endif //defined(_MSC_VER)
+
+#endif // __STACKWALKER_H__
