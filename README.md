@@ -37,6 +37,17 @@ This project only supports the newer Xxx64-funtions. If you need to use it on ol
 The latest *dbghelp.dll* can always be downloaded with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/).
 This also contains the *symsrv.dll* which enables the use of the public Microsoft symbols-server (can be used to retrieve debugging information for system-files; see below).
 
+## Build
+
+```
+mkdir build-dir
+cd build-dir
+cmake -G "Visual Studio 15 2017 Win64" --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX=%cd%/root ..
+cmake --build . --config RelWithDebInfo
+ctest.exe -V -C RelWithDebInfo
+cmake --build . --target install --config RelWithDebInfo
+```
+
 ## Using the code
 
 The usage of the class is very simple. For example if you want to display the callstack of the current thread, just instantiate a `StackWalk` object and call the `ShowCallstack` member:
