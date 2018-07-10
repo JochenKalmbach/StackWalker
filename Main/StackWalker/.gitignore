@@ -8,3 +8,5 @@
 /Itanium
 /ipch
 /.vs
+/*.vc.db
+/*.vc.opendb
