@@ -24,6 +24,38 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
 endif()
 
 if(CMAKE_COMPILER_IS_MSVC)
+    # MSVC_TOOLSET_VERSION is only available from cmake 3.12
+    # --> https://cmake.org/cmake/help/v3.12/variable/MSVC_TOOLSET_VERSION.html
+    # --> https://gitlab.kitware.com/KindDragon/cmake/commit/f2a61e0a4790d4d52a2412c8017be2b92e9af26f?view=inline
+    if(NOT DEFINED MSVC_TOOLSET_VERSION)
+        if(MSVC_VERSION GREATER_EQUAL 1920)
+            set(MSVC_TOOLSET_VERSION "") # leave unknown
+        elseif(MSVC_VERSION GREATER_EQUAL 1910)
+            # VS 2017
+            set(MSVC_TOOLSET_VERSION 141)
+        elseif(MSVC_VERSION EQUAL 1900)
+            # VS 2015
+            set(MSVC_TOOLSET_VERSION 140)
+        elseif(MSVC_VERSION EQUAL 1800)
+            # VS 2013
+            set(MSVC_TOOLSET_VERSION 120)
+        elseif(MSVC_VERSION EQUAL 1700)
+            # VS 2012
+            set(MSVC_TOOLSET_VERSION 110)
+        elseif(MSVC_VERSION EQUAL 1600)
+            # VS 2010
+            set(MSVC_TOOLSET_VERSION 100)
+        elseif(MSVC_VERSION EQUAL 1500)
+            # VS 2008
+            set(MSVC_TOOLSET_VERSION 90)
+        elseif(MSVC_VERSION EQUAL 1400)
+            # VS 2005
+            set(MSVC_TOOLSET_VERSION 80)
+        else()
+            # We don't support MSVC_TOOLSET_VERSION for earlier compiler.
+        endif()
+    endif()
+
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_SECURE_SCL=0")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_CRT_SECURE_NO_DEPRECATE")
@@ -58,9 +90,16 @@ install(TARGETS "${TARGET_StackWalker}"
 install(FILES "${CMAKE_SOURCE_DIR}/Main/StackWalker/StackWalker.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+if (MSVC_VERSION GREATER_EQUAL 1910)
+    set(PDB_StackWalker "${TARGET_StackWalker}.pdb")
+else()
+    set(PDB_StackWalker "vc${MSVC_TOOLSET_VERSION}.pdb")
+endif()
 install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_StackWalker}.dir/$\{CMAKE_INSTALL_CONFIG_NAME\}/${TARGET_StackWalker}.pdb"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR} OPTIONAL)
+    "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_StackWalker}.dir/$\{CMAKE_INSTALL_CONFIG_NAME\}/${PDB_StackWalker}"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RENAME "${TARGET_StackWalker}.pdb"
+    OPTIONAL)
 
 
 if (StackWalker_DISABLE_TESTS)
