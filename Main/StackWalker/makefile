@@ -4,7 +4,7 @@ PROJ=StackWalker
 ALL : $(OUTDIR) $(OUTDIR)\$(PROJ).exe
 
 $(OUTDIR) :
-    if not exist "$(OUTDIR)/$(NULL)" mkdir "$(OUTDIR)"
+	if not exist "$(OUTDIR)/$(NULL)" mkdir "$(OUTDIR)"
 
 LINK32_OBJS= \
 	$(OUTDIR)\StackWalker.obj \
@@ -22,5 +22,5 @@ $(OUTDIR)\$(PROJ).exe:  $(LINK32_OBJS)
     $(link) $(ldebug) $(conlflags) /PDB:$(OUTDIR)\$(PROJ).pdb -out:$(OUTDIR)\$(PROJ).exe $(LINK32_OBJS) $(conlibs) ole32.lib
 
 CLEAN :
-        $(CLEANUP)
+	$(CLEANUP)
 
