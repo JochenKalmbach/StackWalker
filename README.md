@@ -2,8 +2,8 @@
 
 This article describes the (documented) way to walk a callstack for any thread (own, other and remote). It has an abstraction layer, so the calling app does not need to know the internals.
 
-This project was initially published on Codeproject (http://www.codeproject.com/KB/threads/StackWalker.aspx). 
-But it is hard to maintain the article and the source on codeproject, 
+This project was initially published on Codeproject (http://www.codeproject.com/KB/threads/StackWalker.aspx).
+But it is hard to maintain the article and the source on codeproject,
 so I was pushed to publish the source code on an "easier to modify" platform. Therefor I have chosen "codeplex" ;(
 
 But time goes by, and codeplex went away ;)
@@ -30,8 +30,8 @@ The goal for this project was the following:
 ## Background
 
 To walk the callstack there is a documented interface: [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp)
-Starting with Win9x/W2K, this interface is in the *dbghelp.dll* library (on NT, it is in *imagehlp.dll*). 
-But the function name (`StackWalk64`) has changed starting with W2K (before it was called `StackWalk` (without the `64`))! 
+Starting with Win9x/W2K, this interface is in the *dbghelp.dll* library (on NT, it is in *imagehlp.dll*).
+But the function name (`StackWalk64`) has changed starting with W2K (before it was called `StackWalk` (without the `64`))!
 This project only supports the newer Xxx64-functions. If you need to use it on older systems, you can download the [redistributable for NT/W9x](http://www.microsoft.com/downloads/release.asp?releaseid=30682).
 
 The latest *dbghelp.dll* can always be downloaded with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/).
@@ -86,7 +86,7 @@ You can now double-click on a line and the IDE will automatically jump to the de
 
 ### Providing own output-mechanism
 
-If you want to direct the output to a file or want to use some other output-mechanism, you simply need to derive from the `StackWalker` class. 
+If you want to direct the output to a file or want to use some other output-mechanism, you simply need to derive from the `StackWalker` class.
 You have two options to do this: only overwrite the `OnOutput` method or overwrite each `OnXxx`-function.
 The first solution (`OnOutput`) is very easy and uses the default-implementation of the other `OnXxx`-functions (which should be enough for most of the cases). To output also to the console, you need to do the following:
 
@@ -96,8 +96,8 @@ class MyStackWalker : public StackWalker
 public:
     MyStackWalker() : StackWalker() {}
 protected:
-    virtual void OnOutput(LPCSTR szText) { 
-        printf(szText); StackWalker::OnOutput(szText); 
+    virtual void OnOutput(LPCSTR szText) {
+        printf(szText); StackWalker::OnOutput(szText);
     }
 };
 ```
@@ -127,9 +127,9 @@ In the constructor of the class, you need to specify if you want to generate cal
 ```c++
 {
 public:
-    StackWalker(int options = OptionsAll, 
-                LPCSTR szSymPath = NULL, 
-                DWORD dwProcessId = GetCurrentProcessId(), 
+    StackWalker(int options = OptionsAll,
+                LPCSTR szSymPath = NULL,
+                DWORD dwProcessId = GetCurrentProcessId(),
                 HANDLE hProcess = GetCurrentProcess());
     // Just for other processes with
     // default-values for options and symPath
@@ -143,7 +143,7 @@ To do the actual stack-walking you need to call the following functions:
 class StackWalker
 {
 public:
-    BOOL ShowCallstack(HANDLE hThread = GetCurrentThread(), CONTEXT *context = NULL, 
+    BOOL ShowCallstack(HANDLE hThread = GetCurrentThread(), CONTEXT *context = NULL,
                        PReadProcessMemoryRoutine readMemoryFunction = NULL, LPVOID pUserData = NULL);
 };
 ```
@@ -179,7 +179,7 @@ To walk the callstack of a given thread, you need at least two facts:
 
 #### The context of the thread
 
-The context is used to retrieve the current *Instruction Pointer* and the values for the *Stack Pointer (SP)* and sometimes the *Frame Pointer (FP)*. 
+The context is used to retrieve the current *Instruction Pointer* and the values for the *Stack Pointer (SP)* and sometimes the *Frame Pointer (FP)*.
 The difference between SP and FP is in short: SP points to the latest address on the stack. FP is used to reference the arguments for a function. See also [Difference Between Stack Pointer and Frame Pointer](http://www.embeddedrelated.com/usenet/embedded/show/31646-1.php).
 But only the SP is essential for the processor. The FP is only used by the compiler. You can also disable the usage of FP (see: (/Oy [Frame-Pointer Omission](http://msdn.microsoft.com/library/en-us/vccore/html/_core_.2f.oy.asp)).
 
@@ -204,11 +204,11 @@ According to this documentation, most programs only initialize `AddrPC` and `Add
 
 ### Walking the callstack of the current thread
 
-On x86 systems (prior to XP), there is no direct supported function to retrieve the context of the current thread. 
-The recommended way is to throw an exception and catch it. Now you will have a valid context-record. 
-The default way of capturing the context of the current thread is by doing some inline-assembler to retrieve `EIP`, `ESP` and `EBP`. 
-If you want to use the *documented* way, then you need to define `CURRENT_THREAD_VIA_EXCEPTION` for the project. 
-But you should be aware of the fact, that `GET_CURRENT_CONTEXT` is a macro which internally uses [`__try __except`](http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vccelng/htm/key_s-z_4.asp). 
+On x86 systems (prior to XP), there is no direct supported function to retrieve the context of the current thread.
+The recommended way is to throw an exception and catch it. Now you will have a valid context-record.
+The default way of capturing the context of the current thread is by doing some inline-assembler to retrieve `EIP`, `ESP` and `EBP`.
+If you want to use the *documented* way, then you need to define `CURRENT_THREAD_VIA_EXCEPTION` for the project.
+But you should be aware of the fact, that `GET_CURRENT_CONTEXT` is a macro which internally uses [`__try __except`](http://msdn.microsoft.com/library/default.asp?url=/library/en-us/vccelng/htm/key_s-z_4.asp).
 Your function must be able to contain these statements.
 
 Starting with XP and on x64 and IA64 systems, there is a documented function to retrieve the context of the current thread: [RtlCaptureContext](http://msdn.microsoft.com/library/en-us/debug/base/rtlcapturecontext.asp).
@@ -222,7 +222,7 @@ To do a stack-walking of the current thread, you simply need to do:
 
 ### Walking the callstack of other threads in the same process
 
-To walk the callstack of another thread inside the same process, you need to suspend the target thread (so the callstack will not change during the stack-walking). 
+To walk the callstack of another thread inside the same process, you need to suspend the target thread (so the callstack will not change during the stack-walking).
 But you should be aware that suspending a thread in the same process might lead to dead-locks! (See: [Why you never should call Suspend/TerminateThread (Part I)](http://blog.kalmbachnet.de/?postid=6), [Part II](http://blog.kalmbachnet.de/?postid=16, [Part III](http://blog.kalmbachnet.de/?postid=17))
 
 If you have the handle to the thread, you can do the following to retrieve the callstack:
@@ -236,14 +236,14 @@ For a complete sample to retrieve the callstack of another thread, you can take 
 
 ### Walking the callstack of other threads in other processes
 
-The approach is almost the same as for walking the callstack for the current process. 
+The approach is almost the same as for walking the callstack for the current process.
 You only need to provide the `ProcessID` and a handle to the process (`hProcess`). Then you also need to suspend the thread to do the stack-walking. A complete sample to retrieve the callstack of another process is in the demo-project.
 
 ### Reusing the `StackWalk` instance
 
-It is no problem to reuse the `StackWalk` instance, as long as you want to do the stack-walking for the same process. 
-If you want to do a lot of stack-walking it is recommended to reuse the instance. 
-The reason is simple: if you create a new instance, then the symbol-files must be re-loaded for each instance. 
+It is no problem to reuse the `StackWalk` instance, as long as you want to do the stack-walking for the same process.
+If you want to do a lot of stack-walking it is recommended to reuse the instance.
+The reason is simple: if you create a new instance, then the symbol-files must be re-loaded for each instance.
 And this is really time-consuming. Also it is not allowed to access the `StackWalk` functions from different threads (the *dbghelp.dll* is **not** thread-safe!). Therefore it makes no sense to create more than one instance...
 
 ### Symbol-Search-Path
@@ -275,12 +275,12 @@ If you have NT4, then the `ToolHelp32-API` is not available. But in NT4 you can 
 
 There are a couple of issues with *dbghelp.dll*.
 
-* The first is, there are two &quot;teams&quot; at Microsoft which redistribute the <i>dbghelp.dll</i>. One team is the *OS-team*, the other is the *Debugging-Tools-Team* (I don't know the real names...). In general you can say: The *dbghelp.dll* provided with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/) is the most recent version. 
+* The first is, there are two &quot;teams&quot; at Microsoft which redistribute the <i>dbghelp.dll</i>. One team is the *OS-team*, the other is the *Debugging-Tools-Team* (I don't know the real names...). In general you can say: The *dbghelp.dll* provided with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/) is the most recent version.
 One problem of this two teams is the different versioning of the *dbghelp.dll*. For example, for XP-SP1 the version is *5.1.2600.1106* dated *2002-08-29*. The version *6.0.0017.0* which was redistributed from the *debug-team* is dated *2002-04-31*. So there is at least a conflict in the date (the newer version is older). And it is even harder to decide which version is "better" (or has more functionality).
-* Starting with Me/W2K, the *dbghelp.dll* file in the *system32* directory is protected by the [System File Protection](http://support.microsoft.com/?kbid=222193). So if you want to use a newer *dbghelp.dll* you need to redistribute the version from the *Debugging Tools for Windows* (put it in the same directory as your EXE). 
-This leads to a problem on W2K if you want to walk the callstack for an app which was built using VC7 or later. The VC7 compiler generates a new PDB-format (called [DIA](http://msdn.microsoft.com/library/en-us/diasdk/html/vsoriDebugInterfaceAccessSDK.asp)). 
+* Starting with Me/W2K, the *dbghelp.dll* file in the *system32* directory is protected by the [System File Protection](http://support.microsoft.com/?kbid=222193). So if you want to use a newer *dbghelp.dll* you need to redistribute the version from the *Debugging Tools for Windows* (put it in the same directory as your EXE).
+This leads to a problem on W2K if you want to walk the callstack for an app which was built using VC7 or later. The VC7 compiler generates a new PDB-format (called [DIA](http://msdn.microsoft.com/library/en-us/diasdk/html/vsoriDebugInterfaceAccessSDK.asp)).
 This PDB-format cannot be read with the *dbghelp.dll* which is installed with the OS. Therefore you will not get very useful callstacks (or at least with no debugging info like filename, line, function name, ...). To overcome this problem, you need to redistribute a newer *dbghelp.dll*.
-* The *dbghelp.dll* version *6.5.3.7* has a *bug* or at least a *documentation change* of the [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) function. 
+* The *dbghelp.dll* version *6.5.3.7* has a *bug* or at least a *documentation change* of the [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) function.
 In the documentation you can read:
 *The first call to this function will fail if the `AddrPC` and `AddrFrame` members of the `STACKFRAME64` structure passed in the `StackFrame` parameter are not initialized.*
 
@@ -288,9 +288,9 @@ and
 
 * *[The `ContextRecord`] parameter is required only when the `MachineType` parameter is not `IMAGE_FILE_MACHINE_I386`.*
 
-*But this is not true anymore.* 
-Now the callstack on x86-systems cannot be retrieved if you pass `NULL` as *`ContextRecord`*. 
-From my point of view this is a major documentation change. 
+*But this is not true anymore.*
+Now the callstack on x86-systems cannot be retrieved if you pass `NULL` as *`ContextRecord`*.
+From my point of view this is a major documentation change.
 Now you either need to initialize the `AddrStack` as well, or provide a valid *`ContextRecord`* which contains the `EIP`, `EBP` and `ESP` registers!
 * See also comments in the *Initializing the STACKFRAME64-structure* chapter...
 

@@ -1,5 +1,5 @@
 /**********************************************************************
- * 
+ *
  * main.cpp
  *
  *
@@ -69,14 +69,14 @@ void StackWalkTest()
 
 void GlobalIntTest()
 {
-	StackWalkerToConsole sw;
-	sw.ShowObject(&iGlobalInt);
+  StackWalkerToConsole sw;
+  sw.ShowObject(&iGlobalInt);
 }
 
 void GlobalFunctionPointerTest()
 {
-	StackWalkerToConsole sw;
-	sw.ShowObject(&pGlobalFuncPtr);
+  StackWalkerToConsole sw;
+  sw.ShowObject(&pGlobalFuncPtr);
 }
 
 #ifdef UNHANDLED_EXCEPTION_TEST
@@ -96,22 +96,22 @@ static BOOL PreventSetUnhandledExceptionFilter()
   if (hKernel32 == NULL) return FALSE;
   void *pOrgEntry = GetProcAddress(hKernel32, "SetUnhandledExceptionFilter");
   if (pOrgEntry == NULL) return FALSE;
- 
+
 #ifdef _M_IX86
   // Code for x86:
-  // 33 C0                xor         eax,eax  
-  // C2 04 00             ret         4 
+  // 33 C0                xor         eax,eax
+  // C2 04 00             ret         4
   unsigned char szExecute[] = { 0x33, 0xC0, 0xC2, 0x04, 0x00 };
 #elif _M_X64
-  // 33 C0                xor         eax,eax 
-  // C3                   ret  
+  // 33 C0                xor         eax,eax
+  // C3                   ret
   unsigned char szExecute[] = { 0x33, 0xC0, 0xC3 };
 #else
 #error "The following code only works for x86 and x64!"
 #endif
- 
+
   DWORD dwOldProtect = 0;
-  BOOL bProt = VirtualProtect(pOrgEntry, sizeof(szExecute), 
+  BOOL bProt = VirtualProtect(pOrgEntry, sizeof(szExecute),
     PAGE_EXECUTE_READWRITE, &dwOldProtect);
 
   SIZE_T bytesWritten = 0;
