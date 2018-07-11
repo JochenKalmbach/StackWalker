@@ -136,7 +136,7 @@ static LONG __stdcall CrashHandlerExceptionFilter(EXCEPTION_POINTERS* pExPtrs)
 #ifdef _M_IX86
   if (pExPtrs->ExceptionRecord->ExceptionCode == EXCEPTION_STACK_OVERFLOW)
   {
-    static char MyStack[1024*128];  // be sure that we have enought space...
+    static char MyStack[1024*128];  // be sure that we have enough space...
     // it assumes that DS and SS are the same!!! (this is the case for Win32)
     // change the stack only if the selectors are the same (this is the case for Win32)
     //__asm push offset MyStack[1024*128];
@@ -230,16 +230,16 @@ int _tmain(int argc, _TCHAR* argv[])
   StackWalkTest();
 
 #ifdef EXCEPTION_FILTER_TEST
-  printf("\n\n\nShow a the callstack from inside an execption-handler:\n\n\n");
+  printf("\n\n\nShow a the callstack from inside an exception-handler:\n\n\n");
   TestExceptionWalking();
 #endif
 
 #ifdef UNHANDLED_EXCEPTION_TEST
   printf("\n\n\nCatch unhandled exceptions and show the callstack:\n\n\n");
-  // This will only work, if the programm is *not* started under a debugger
+  // This will only work, if the program is *not* started under a debugger
   // If the program is running under a debugger, the debugger will catch this exception ;)
   InitUnhandledExceptionFilter();
-  //f(0);  // endlress recursion
+  //f(0);  // endless recursion
   char *szTemp = (char*)1;
   strcpy_s(szTemp, 1000, "A");
 #endif

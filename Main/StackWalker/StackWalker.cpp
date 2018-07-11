@@ -15,7 +15,7 @@
  *                       (should also be enough)
  *                     - Changed to compile correctly with the PSDK of VC7.0
  *                       (GetFileVersionInfoSizeA and GetFileVersionInfoA is wrongly defined:
- *                        it uses LPSTR instead of LPCSTR as first paremeter)
+ *                        it uses LPSTR instead of LPCSTR as first parameter)
  *                     - Added declarations to support VC5/6 without using 'dbghelp.h'
  *                     - Added a 'pUserData' member to the ShowCallstack function and the 
  *                       PReadProcessMemoryRoutine declaration (to pass some user-defined data, 
@@ -43,7 +43,7 @@
  *  2008-11-27   v8      Debugging Tools for Windows are now stored in a different directory
  *                       Thanks to Luiz Salamon which reported this "bug"...
  *                       http://www.codeproject.com/KB/threads/StackWalker.aspx?msg=2822736#xx2822736xx
- *  2009-04-10   v9      License slihtly corrected (<ORGANIZATION> replaced)
+ *  2009-04-10   v9      License slightly corrected (<ORGANIZATION> replaced)
  *  2009-11-01   v10     Moved to http://stackwalker.codeplex.com/
  *  2009-11-02   v11     Now try to use IMAGEHLP_MODULE64_V3 if available
  *  2010-04-15   v12     Added support for VS2010 RTM
@@ -243,7 +243,7 @@ static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
 {
   if (nMaxDestSize <= 0) return;
   strncpy_s(szDest, nMaxDestSize, szSrc, _TRUNCATE);
-  szDest[nMaxDestSize-1] = 0;  // INFO: _TRUNCATE will ensure that it is nul-terminated; but with older compilers (<1400) it uses "strncpy" and this does not!)
+  szDest[nMaxDestSize-1] = 0;  // INFO: _TRUNCATE will ensure that it is null-terminated; but with older compilers (<1400) it uses "strncpy" and this does not!)
 }  // MyStrCpy
 
 // Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
@@ -290,16 +290,16 @@ public:
     if (m_parent == NULL)
       return FALSE;
     // Dynamically load the Entry-Points for dbghelp.dll:
-    // First try to load the newsest one from
+    // First try to load the newest one from
     TCHAR szTemp[4096];
-    // But before wqe do this, we first check if the ".local" file exists
+    // But before we do this, we first check if the ".local" file exists
     if (GetModuleFileName(NULL, szTemp, 4096) > 0)
     {
       _tcscat_s(szTemp, _T(".local"));
       if (GetFileAttributes(szTemp) == INVALID_FILE_ATTRIBUTES)
       {
         // ".local" file does not exist, so we can try to load the dbghelp.dll from the "Debugging Tools for Windows"
-        // Ok, first try the new path according to the archtitecture:
+        // Ok, first try the new path according to the architecture:
 #ifdef _M_IX86
         if ( (m_hDbhHelp == NULL) && (GetEnvironmentVariable(_T("ProgramFiles"), szTemp, 4096) > 0) )
         {
@@ -653,7 +653,7 @@ private:
     pGMI = (tGMI) GetProcAddress( hPsapi, "GetModuleInformation" );
     if ( (pEPM == NULL) || (pGMFNE == NULL) || (pGMBN == NULL) || (pGMI == NULL) )
     {
-      // we couldn´t find all functions
+      // we couldn't find all functions
       FreeLibrary(hPsapi);
       return FALSE;
     }
@@ -717,7 +717,7 @@ private:
     ULONGLONG fileVersion = 0;
     if ( (m_parent != NULL) && (szImg != NULL) )
     {
-      // try to retrive the file-version:
+      // try to retrieve the file-version:
       if ( (this->m_parent->m_options & StackWalker::RetrieveFileVersion) != 0)
       {
         VS_FIXEDFILEINFO *fInfo = NULL;
@@ -744,7 +744,7 @@ private:
         }
       }
 
-      // Retrive some additional-infos about the module
+      // Retrieve some additional-infos about the module
       IMAGEHLP_MODULE64_V3 Module;
       const char *szSymType = "-unknown-";
       if (this->GetModuleInfo(hProcess, baseAddr, &Module) != FALSE)
@@ -828,10 +828,10 @@ public:
         free(pData);
         return TRUE;
       }
-      s_useV3Version = false;  // to prevent unneccessarry calls with the larger struct...
+      s_useV3Version = false;  // to prevent unnecessary calls with the larger struct...
     }
 
-    // could not retrive the bigger structure, try with the smaller one (as defined in VC7.1)...
+    // could not retrieve the bigger structure, try with the smaller one (as defined in VC7.1)...
     pModuleInfo->SizeOfStruct = sizeof(IMAGEHLP_MODULE64_V2);
     memcpy(pData, pModuleInfo, sizeof(IMAGEHLP_MODULE64_V2));
     if (this->pSGMI(hProcess, baseAddr, (IMAGEHLP_MODULE64_V3*) pData) != FALSE)
@@ -1052,7 +1052,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
 
       // TODO: Detect if you want to get a thread context of a different process, which is running a different processor architecture...
       // This does only work if we are x64 and the target process is x64 or x86;
-      // It cannnot work, if this process is x64 and the target process is x64... this is not supported...
+      // It cannot work, if this process is x64 and the target process is x64... this is not supported...
       // See also: http://www.howzatt.demon.co.uk/articles/DebuggingInWin64.html
       if (GetThreadContext(hThread, &c) == FALSE)
       {
@@ -1117,7 +1117,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT *context, PReadPro
     // if this returns ERROR_INVALID_ADDRESS (487) or ERROR_NOACCESS (998), you can
     // assume that either you are done, or that the stack is so hosed that the next
     // deeper frame could not be found.
-    // CONTEXT need not to be suplied if imageTyp is IMAGE_FILE_MACHINE_I386!
+    // CONTEXT need not to be supplied if imageTyp is IMAGE_FILE_MACHINE_I386!
     if ( ! this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem, this->m_sw->pSFTA, this->m_sw->pSGMB, NULL) )
     {
       // INFO: "StackWalk64" does not set "GetLastError"...
@@ -1328,7 +1328,7 @@ void StackWalker::OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD s
     DWORD v1 = (DWORD) ((fileVersion>>48) & 0xFFFF);
     _snprintf_s(buffer, maxLen, "%s:%s (%p), size: %d (result: %d), SymType: '%s', PDB: '%s', fileVersion: %d.%d.%d.%d\n", img, mod, (LPVOID) baseAddr, size, result, symType, pdbName, v1, v2, v3, v4);
   }
-  buffer[STACKWALK_MAX_NAMELEN - 1] = 0;  // be sure it is NUL terminated
+  buffer[STACKWALK_MAX_NAMELEN - 1] = 0;  // be sure it is NULL terminated
   OnOutput(buffer);
 }
 

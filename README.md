@@ -4,7 +4,7 @@ This article describes the (documented) way to walk a callstack for any thread (
 
 This project was initially published on Codeproject (http://www.codeproject.com/KB/threads/StackWalker.aspx). 
 But it is hard to maintain the article and the source on codeproject, 
-so I was pushed to publish the source code on an "easier to modify" platform. Therefor I have choosen "codeplex" ;(
+so I was pushed to publish the source code on an "easier to modify" platform. Therefor I have chosen "codeplex" ;(
 
 But time goes by, and codeplex went away ;)
 
@@ -32,7 +32,7 @@ The goal for this project was the following:
 To walk the callstack there is a documented interface: [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp)
 Starting with Win9x/W2K, this interface is in the *dbghelp.dll* library (on NT, it is in *imagehlp.dll*). 
 But the function name (`StackWalk64`) has changed starting with W2K (before it was called `StackWalk` (without the `64`))! 
-This project only supports the newer Xxx64-funtions. If you need to use it on older systems, you can download the [redistributable for NT/W9x](http://www.microsoft.com/downloads/release.asp?releaseid=30682).
+This project only supports the newer Xxx64-functions. If you need to use it on older systems, you can download the [redistributable for NT/W9x](http://www.microsoft.com/downloads/release.asp?releaseid=30682).
 
 The latest *dbghelp.dll* can always be downloaded with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/).
 This also contains the *symsrv.dll* which enables the use of the public Microsoft symbols-server (can be used to retrieve debugging information for system-files; see below).
@@ -192,14 +192,14 @@ To successfully walk the callstack with [StackWalk64](http://msdn.microsoft.com/
 
 * *The first call to this function will fail if the `AddrPC` and `AddrFrame` members of the `STACKFRAME64` structure passed in the `StackFrame` parameter are not initialized.*
 
-According to this documentation, most programs only initialize `AddrPC` and `AddrFrame` and this had worked until the newest *dbhhelp.dll* (v5.6.3.7). Now, you also need to initialize `AddrStack`. After having some trouble with this (and other problems) I talked to the dbghelp-team and got the following answer (2005-08-02; my own comments are written in *italics*!):
+According to this documentation, most programs only initialize `AddrPC` and `AddrFrame` and this had worked until the newest *dbghelp.dll* (v5.6.3.7). Now, you also need to initialize `AddrStack`. After having some trouble with this (and other problems) I talked to the dbghelp-team and got the following answer (2005-08-02; my own comments are written in *italics*!):
 
 * `AddrStack` should always be set to the stack pointer value for all platforms. You can certainly publish that `AddrStack` should be set. You&#39;re also welcome to say that new releases of dbghelp are now requiring this.
 * Given a current dbghelp, your code should:
   1. Always use [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp)
-	2. Always set `AddrPC` to the current instruction pointer (*`Eip` on x86, `Rip` on x64 and `StIIP` on IA64*)
+  2. Always set `AddrPC` to the current instruction pointer (*`Eip` on x86, `Rip` on x64 and `StIIP` on IA64*)
   3. Always set `AddrStack` to the current stack pointer (*`Esp` on x86, `Rsp` on x64 and `IntSp` on IA64*)
-	4. Set `AddrFrame` to the current frame pointer when meaningful. On x86 this is `Ebp`, on x64 you can use `Rbp` (*but is not used by VC2005B2; instead it uses `Rdi`!*) and on IA64 you can use `RsBSP`. [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) will ignore the value when it isn&#39;t needed for unwinding.
+  4. Set `AddrFrame` to the current frame pointer when meaningful. On x86 this is `Ebp`, on x64 you can use `Rbp` (*but is not used by VC2005B2; instead it uses `Rdi`!*) and on IA64 you can use `RsBSP`. [StackWalk64](http://msdn.microsoft.com/library/en-us/debug/base/stackwalk64.asp) will ignore the value when it isn&#39;t needed for unwinding.
   5. Set `AddrBStore` to `RsBSP` for IA64.
 
 ### Walking the callstack of the current thread
@@ -275,7 +275,7 @@ If you have NT4, then the `ToolHelp32-API` is not available. But in NT4 you can 
 
 There are a couple of issues with *dbghelp.dll*.
 
-* The first is, there are two &quot;teams&quot; at Microsoft which redistribute the <i>dbghelp.dll</i>. One team is the *OS-team*, the other is the *Debugging-Tools-Team* (I don&#39;t know the real names...). In general you can say: The *dbghelp.dll* provided with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/) is the most recent version. 
+* The first is, there are two &quot;teams&quot; at Microsoft which redistribute the <i>dbghelp.dll</i>. One team is the *OS-team*, the other is the *Debugging-Tools-Team* (I don't know the real names...). In general you can say: The *dbghelp.dll* provided with the [Debugging Tools for Windows](http://www.microsoft.com/whdc/devtools/debugging/) is the most recent version. 
 One problem of this two teams is the different versioning of the *dbghelp.dll*. For example, for XP-SP1 the version is *5.1.2600.1106* dated *2002-08-29*. The version *6.0.0017.0* which was redistributed from the *debug-team* is dated *2002-04-31*. So there is at least a conflict in the date (the newer version is older). And it is even harder to decide which version is "better" (or has more functionality).
 * Starting with Me/W2K, the *dbghelp.dll* file in the *system32* directory is protected by the [System File Protection](http://support.microsoft.com/?kbid=222193). So if you want to use a newer *dbghelp.dll* you need to redistribute the version from the *Debugging Tools for Windows* (put it in the same directory as your EXE). 
 This leads to a problem on W2K if you want to walk the callstack for an app which was built using VC7 or later. The VC7 compiler generates a new PDB-format (called [DIA](http://msdn.microsoft.com/library/en-us/diasdk/html/vsoriDebugInterfaceAccessSDK.asp)). 
@@ -296,12 +296,12 @@ Now you either need to initialize the `AddrStack` as well, or provide a valid *`
 
 ### Options
 
-To do some kind of modification of the behaviour, you can optionally specify some options. Here is the list of the available options:
+To do some kind of modification of the behavior, you can optionally specify some options. Here is the list of the available options:
 
 ```c++
 typedef enum StackWalkOptions
 {
-    // No additional info will be retrived
+    // No additional info will be retrieved
     // (only the address is available)
     RetrieveNone = 0,
 
@@ -340,4 +340,4 @@ typedef enum StackWalkOptions
 * Currently only supports ANSI-names in callbacks (of course, the project can be compiled with UNICODE...).
 * To open a remote thread I used `OpenThread` which is not available on NT4/W9x. To have an example of doing this in NT4/Win9x please refer to [Remote Library](http://www.codeproject.com/win32/Remote.asp).
 * Walking mixed-mode callstacks (managed/unmanaged) does only return the unmanaged functions.
-* Doesn&#39;t work when debugging with the `/DEBUG:fastlink` [option](https://blogs.msdn.microsoft.com/vcblog/2014/11/12/speeding-up-the-incremental-developer-build-scenario/)
+* Doesn't work when debugging with the `/DEBUG:fastlink` [option](https://blogs.msdn.microsoft.com/vcblog/2014/11/12/speeding-up-the-incremental-developer-build-scenario/)
