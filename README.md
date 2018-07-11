@@ -42,7 +42,12 @@ This also contains the *symsrv.dll* which enables the use of the public Microsof
 ```
 mkdir build-dir
 cd build-dir
+
+# batch
 cmake -G "Visual Studio 15 2017 Win64" --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX=%cd%/root ..
+# powershell
+cmake -G "Visual Studio 15 2017 Win64" --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX="$($(get-location).Path)/root" ..
+
 cmake --build . --config RelWithDebInfo
 ctest.exe -V -C RelWithDebInfo
 cmake --build . --target install --config RelWithDebInfo
