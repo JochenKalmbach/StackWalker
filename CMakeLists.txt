@@ -90,7 +90,7 @@ install(TARGETS "${TARGET_StackWalker}"
 install(FILES "${CMAKE_SOURCE_DIR}/Main/StackWalker/StackWalker.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-if (MSVC_VERSION GREATER_EQUAL 1910)
+if (MSVC_VERSION GREATER_EQUAL 1900)
     set(PDB_StackWalker "${TARGET_StackWalker}.pdb")
 else()
     set(PDB_StackWalker "vc${MSVC_TOOLSET_VERSION}.pdb")
