@@ -12,7 +12,7 @@ So I now migrated to GitHub ;)
 
 # Latest Build status
 
-![build result](https://ci.appveyor.com/api/projects/status/github/JochenKalmbach/stackwalker?branch=master&svg=true)
+[![build result](https://ci.appveyor.com/api/projects/status/github/JochenKalmbach/stackwalker?branch=master&svg=true)](https://ci.appveyor.com/project/JochenKalmbach/stackwalker)
 
 # Documentation
 
