@@ -1425,41 +1425,54 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
 #if _MSC_VER >= 1400
   maxLen = _TRUNCATE;
 #endif
-  _snprintf_s(buffer, maxLen, "SymInit: Symbol-SearchPath: '%s', symOptions: %d, UserName: '%s'\n",
+  _snprintf_s(buffer, sizeof(buffer), maxLen, "SymInit: Symbol-SearchPath: '%s', symOptions: %d, UserName: '%s'\n",
               szSearchPath, symOptions, szUserName);
-  buffer[STACKWALK_MAX_NAMELEN - 1] = 0;
+  buffer[_countof(buffer) - 1] = '\0';
   OnOutput(buffer);
+
   // Also display the OS-version
-#if _MSC_VER <= 1200
-  OSVERSIONINFOA ver;
-  ZeroMemory(&ver, sizeof(OSVERSIONINFOA));
-  ver.dwOSVersionInfoSize = sizeof(ver);
-  if (GetVersionExA(&ver) != FALSE)
+#if _WIN32_WINNT > 0x0600 // _WIN32_WINNT_VISTA
+  // Get a handle on RtlGetVersion
+  HMODULE h_NtDll = GetModuleHandleW(L"ntdll.dll");
+  typedef LONG(WINAPI * tRtlGetVersion)(RTL_OSVERSIONINFOEXW*);
+  tRtlGetVersion f_RtlGetVersion = (tRtlGetVersion)GetProcAddress(h_NtDll, "RtlGetVersion");
+  if (f_RtlGetVersion)
   {
-    _snprintf_s(buffer, maxLen, "OS-Version: %d.%d.%d (%s)\n", ver.dwMajorVersion,
-                ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion);
-    buffer[STACKWALK_MAX_NAMELEN - 1] = 0;
+    RTL_OSVERSIONINFOEXW osInfo;
+    osInfo.dwOSVersionInfoSize = sizeof(osInfo);
+    f_RtlGetVersion(&osInfo);
+    CHAR servicePack[128] = {'\0'};
+    if (wcslen(osInfo.szCSDVersion) > 0)
+    {
+      _snprintf_s(servicePack, sizeof(servicePack), _countof(servicePack), "(%s) ", osInfo.szCSDVersion);
+    }
+    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d %s0x%x-0x%x\n",
+                osInfo.dwMajorVersion, osInfo.dwMinorVersion, osInfo.dwBuildNumber, servicePack,
+                osInfo.wSuiteMask, osInfo.wProductType);
+    buffer[_countof(buffer) - 1] = '\0';
     OnOutput(buffer);
   }
 #else
+#if _MSC_VER <= 1200
+  OSVERSIONINFOA ver;
+#else
   OSVERSIONINFOEXA ver;
-  ZeroMemory(&ver, sizeof(OSVERSIONINFOEXA));
-  ver.dwOSVersionInfoSize = sizeof(ver);
-#if _MSC_VER >= 1900
-#pragma warning(push)
-#pragma warning(disable : 4996)
 #endif
-  if (GetVersionExA((OSVERSIONINFOA*)&ver) != FALSE)
+  ZeroMemory(&ver, sizeof(ver));
+  ver.dwOSVersionInfoSize = sizeof(ver);
+  if (GetVersionExA(&ver) != FALSE)
   {
-    _snprintf_s(buffer, maxLen, "OS-Version: %d.%d.%d (%s) 0x%x-0x%x\n", ver.dwMajorVersion,
+#if _MSC_VER <= 1200
+    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d (%s)\n", ver.dwMajorVersion,
+                ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion);
+#else
+    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d (%s) 0x%x-0x%x\n", ver.dwMajorVersion,
                 ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion, ver.wSuiteMask,
                 ver.wProductType);
-    buffer[STACKWALK_MAX_NAMELEN - 1] = 0;
+#endif
+    buffer[_countof(buffer) - 1] = '\0';
     OnOutput(buffer);
   }
-#if _MSC_VER >= 1900
-#pragma warning(pop)
-#endif
 #endif
 }
 
