@@ -10,6 +10,10 @@ But time goes by, and codeplex went away ;)
 
 So I now migrated to GitHub ;)
 
+# Latest Build status
+
+![build result](https://ci.appveyor.com/api/projects/status/github/JochenKalmbach/stackwalker?branch=master&svg=true)
+
 # Documentation
 
 ## Introduction
