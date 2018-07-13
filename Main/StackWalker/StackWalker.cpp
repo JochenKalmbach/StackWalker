@@ -81,16 +81,16 @@
  *   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **********************************************************************/
-
 #include "StackWalker.h"
 
+#include <sstream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <tchar.h>
 #include <windows.h>
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
 #pragma warning(disable : 4826)
-
 
 // If VC7 and later, then use the shipped 'dbghelp.h'-file
 #pragma pack(push, 8)
@@ -1418,6 +1418,53 @@ void StackWalker::OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr)
   OnOutput(buffer);
 }
 
+namespace
+{
+namespace details
+{
+namespace char_traits
+{
+template <typename char_type> std::size_t length(const char_type* s)
+{
+  return strlen(s);
+}
+
+template <> std::size_t length(const WCHAR* s)
+{
+  return wcslen(s);
+}
+} // namespace char_traits
+} // namespace details
+
+template <typename OsInfo> std::string to_string(const OsInfo& osInfo)
+{
+  std::ostringstream oss;
+  oss << "OS-Version: " << osInfo.dwMajorVersion << "." << osInfo.dwMinorVersion << "."
+      << osInfo.dwBuildNumber;
+  if (details::char_traits::length(osInfo.szCSDVersion) > 0)
+  {
+    oss << " (" << osInfo.szCSDVersion << ")";
+  }
+  oss << " 0x" << std::hex << osInfo.wSuiteMask << "-0x" << std::hex
+      << static_cast<unsigned int>(osInfo.wProductType);
+  oss << std::endl;
+  return oss.str();
+}
+
+template <> std::string to_string(const OSVERSIONINFOA& osInfo)
+{
+  std::ostringstream oss;
+  oss << "OS-Version: " << osInfo.dwMajorVersion << "." << osInfo.dwMinorVersion << "."
+      << osInfo.dwBuildNumber;
+  if (details::char_traits::length(osInfo.szCSDVersion) > 0)
+  {
+    oss << " (" << osInfo.szCSDVersion << ")";
+  }
+  oss << std::endl;
+  return oss.str();
+}
+} // namespace
+
 void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName)
 {
   CHAR   buffer[STACKWALK_MAX_NAMELEN];
@@ -1425,8 +1472,9 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
 #if _MSC_VER >= 1400
   maxLen = _TRUNCATE;
 #endif
-  _snprintf_s(buffer, sizeof(buffer), maxLen, "SymInit: Symbol-SearchPath: '%s', symOptions: %d, UserName: '%s'\n",
-              szSearchPath, symOptions, szUserName);
+  _snprintf_s(buffer, sizeof(buffer), maxLen,
+              "SymInit: Symbol-SearchPath: '%s', symOptions: %d, UserName: '%s'\n", szSearchPath,
+              symOptions, szUserName);
   buffer[_countof(buffer) - 1] = '\0';
   OnOutput(buffer);
 
@@ -1441,37 +1489,39 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
     RTL_OSVERSIONINFOEXW osInfo;
     osInfo.dwOSVersionInfoSize = sizeof(osInfo);
     f_RtlGetVersion(&osInfo);
-    CHAR servicePack[128] = {'\0'};
-    if (wcslen(osInfo.szCSDVersion) > 0)
-    {
-      _snprintf_s(servicePack, sizeof(servicePack), _countof(servicePack), "(%s) ", osInfo.szCSDVersion);
-    }
-    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d %s0x%x-0x%x\n",
-                osInfo.dwMajorVersion, osInfo.dwMinorVersion, osInfo.dwBuildNumber, servicePack,
-                osInfo.wSuiteMask, osInfo.wProductType);
-    buffer[_countof(buffer) - 1] = '\0';
-    OnOutput(buffer);
+    //CHAR servicePack[128] = {'\0'};
+    //if (wcslen(osInfo.szCSDVersion) > 0)
+    //{
+    //  _snprintf_s(servicePack, sizeof(servicePack), _countof(servicePack), "(%s) ", osInfo.szCSDVersion);
+    //}
+    //_snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d %s0x%x-0x%x\n",
+    //            osInfo.dwMajorVersion, osInfo.dwMinorVersion, osInfo.dwBuildNumber, servicePack,
+    //            osInfo.wSuiteMask, osInfo.wProductType);
+    //buffer[_countof(buffer) - 1] = '\0';
+    //OnOutput(buffer);
+    OnOutput(::to_string(osInfo).c_str());
   }
 #else
 #if _MSC_VER <= 1200
-  OSVERSIONINFOA ver;
+  OSVERSIONINFOA osInfo;
 #else
-  OSVERSIONINFOEXA ver;
+  OSVERSIONINFOEXA osInfo;
 #endif
-  ZeroMemory(&ver, sizeof(ver));
-  ver.dwOSVersionInfoSize = sizeof(ver);
-  if (GetVersionExA(&ver) != FALSE)
+  ZeroMemory(&osInfo, sizeof(osInfo));
+  osInfo.dwOSVersionInfoSize = sizeof(osInfo);
+  if (GetVersionExA((OSVERSIONINFOA*)&osInfo) != FALSE)
   {
-#if _MSC_VER <= 1200
-    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d (%s)\n", ver.dwMajorVersion,
-                ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion);
-#else
-    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d (%s) 0x%x-0x%x\n", ver.dwMajorVersion,
-                ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion, ver.wSuiteMask,
-                ver.wProductType);
-#endif
-    buffer[_countof(buffer) - 1] = '\0';
-    OnOutput(buffer);
+    //#if _MSC_VER <= 1200
+    //    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d (%s)\n", ver.dwMajorVersion,
+    //                ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion);
+    //#else
+    //    _snprintf_s(buffer, sizeof(buffer), maxLen, "OS-Version: %d.%d.%d (%s) 0x%x-0x%x\n", ver.dwMajorVersion,
+    //                ver.dwMinorVersion, ver.dwBuildNumber, ver.szCSDVersion, ver.wSuiteMask,
+    //                ver.wProductType);
+    //#endif
+    //    buffer[_countof(buffer) - 1] = '\0';
+    //    OnOutput(buffer);
+    OnOutput(::to_string(osInfo).c_str());
   }
 #endif
 }
