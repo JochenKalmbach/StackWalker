@@ -81,6 +81,9 @@
  *   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  **********************************************************************/
+
+#include "StackWalker.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <tchar.h>
@@ -88,7 +91,6 @@
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
 #pragma warning(disable : 4826)
 
-#include "StackWalker.h"
 
 // If VC7 and later, then use the shipped 'dbghelp.h'-file
 #pragma pack(push, 8)
