@@ -41,7 +41,46 @@
 // so we need not to check the version (because we only support _MSC_VER >= 1100)!
 #pragma once
 
-#include <windows.h>
+// include all it - bad way
+//#include <windows.h>
+
+// better include needed parts
+#include <windef.h>
+//#define _M_CEE // DeleteFile
+#include <WinBase.h>
+#include <stdlib.h>
+
+// and undef annoying defines
+#undef GetFreeSpace
+#undef min
+#undef max
+#undef ERROR_UNHANDLED_EXCEPTION
+#undef CreateDirectory
+
+#undef CREATE_NEW
+const int CREATE_NEW = 1;
+#undef SEVERITY_ERROR
+const int SEVERITY_ERROR = 1;
+
+#undef DeleteFile
+__inline
+BOOL
+DeleteFile(LPCTSTR lpFileName)
+{
+#ifdef UNICODE
+  return DeleteFileW(
+#else
+  return DeleteFileA(
+#endif
+    lpFileName
+  );
+}
+
+#undef ERROR_UNKNOWN_COMPONENT
+#undef RequestImpl
+#undef GetStartupInfo
+#undef ERROR_TAG_NOT_FOUND 
+// ... undef more if need 
 
 #if _MSC_VER >= 1900
 #pragma warning(disable : 4091)
