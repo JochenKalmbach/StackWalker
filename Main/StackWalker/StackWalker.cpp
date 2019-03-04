@@ -1,4 +1,4 @@
-/**********************************************************************
+﻿/**********************************************************************
  *
  * StackWalker.cpp
  * https://github.com/JochenKalmbach/StackWalker
@@ -87,11 +87,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <tchar.h>
-#include <windows.h>
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
 #pragma warning(disable : 4826)
 
-// If VC7 and later, then use the shipped 'dbghelp.h'-file
+#ifdef UNICODE
+  #define DBGHELP_TRANSLATE_TCHAR
+
+#endif
 #pragma pack(push, 8)
 #include <dbghelp.h>
 #pragma pack(pop)
@@ -107,13 +109,13 @@ static void MyStrCpy(TCHAR* szDest, size_t nMaxDestSize, const TCHAR* szSrc)
   szDest[nMaxDestSize - 1] = 0;
 } // MyStrCpy
 
-#ifdef _UNICODE
-  typedef IMAGEHLP_SYMBOLW64  tImageHelperSymbol;
-  typedef IMAGEHLP_LINEW64  tImageHelperLine;
-#else
-  typedef IMAGEHLP_SYMBOL64  tImageHelperSymbol;
-  typedef IMAGEHLP_LINE64  tImageHelperLine;
-#endif
+//#ifdef _UNICODE
+//  typedef IMAGEHLP_SYMBOLW64  tImageHelperSymbol;
+//  typedef IMAGEHLP_LINEW64  tImageHelperLine;
+//#else
+//  typedef IMAGEHLP_SYMBOL64  tImageHelperSymbol;
+//  typedef IMAGEHLP_LINE64  tImageHelperLine;
+//#endif
 
 // Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
 #define USED_CONTEXT_FLAGS CONTEXT_FULL
@@ -231,16 +233,16 @@ public:
     static const char strSymInitialize[] = "SymInitializeW";
     static const char strUnDecorateSymbolName[] = "UnDecorateSymbolNameW";
     static const char strSymGetSearchPath[] = "SymGetSearchPathW";
-  	static const char strSymLoadModuleEx[] = "SymLoadModuleExW";
-  	static const char strSymGetLineFromAddr64[] = "SymGetLineFromAddrW64";
-  	static const char strSymGetModuleInfo64[] = "SymGetModuleInfoW64";
+    static const char strSymLoadModuleEx[] = "SymLoadModuleExW";
+    static const char strSymGetLineFromAddr64[] = "SymGetLineFromAddrW64";
+    static const char strSymGetModuleInfo64[] = "SymGetModuleInfoW64";
 #else
-    static const char SymInitialize[] = "SymInitialize";
+    static const char strSymInitialize[] = "SymInitialize";
     static const char strUnDecorateSymbolName[] = "UnDecorateSymbolName";
     static const char strSymGetSearchPath[] = "SymGetSearchPath";
-  	static const char strSymLoadModuleEx[] = "SymLoadModuleEx";
-  	static const char strSymGetLineFromAddr64[] = "SymGetLineFromAddr64";
-  	static const char strSymGetModuleInfo64[] = "SymGetModuleInfo64";
+    static const char strSymLoadModuleEx[] = "SymLoadModuleEx";
+    static const char strSymGetLineFromAddr64[] = "SymGetLineFromAddr64";
+    static const char strSymGetModuleInfo64[] = "SymGetModuleInfo64";
 #endif
     symInitialize = (tSI)GetProcAddress(m_hDbhHelp, strSymInitialize);
     symCleanup = (tSC)GetProcAddress(m_hDbhHelp, "SymCleanup");
@@ -358,7 +360,7 @@ public:
   typedef BOOL(__stdcall* tSGLFA)(IN HANDLE hProcess,
                                   IN DWORD64 dwAddr,
                                   OUT PDWORD pdwDisplacement,
-                                  OUT tImageHelperLine* Line);
+                                  OUT PIMAGEHLP_LINE64 Line);
   tSGLFA symGetLineFromAddr64;
 
   // SymGetModuleBase64()
@@ -380,7 +382,7 @@ public:
   typedef BOOL(__stdcall* tSGSFA)(IN HANDLE hProcess,
                                   IN DWORD64 dwAddr,
                                   OUT PDWORD64 pdwDisplacement,
-                                  OUT tImageHelperSymbol* Symbol);
+                                  OUT PIMAGEHLP_SYMBOL64 Symbol);
   tSGSFA symGetSymFromAddr64;
 
   // SymInitialize()
@@ -394,8 +396,8 @@ public:
                                    IN PTSTR ModuleName,
                                    IN DWORD64 BaseOfDll,
                                    IN DWORD SizeOfDll,
-								   IN PMODLOAD_DATA Data,
-								   IN DWORD         Flags);
+                                   IN PMODLOAD_DATA Data,
+                                   IN DWORD         Flags);
   tSLM symLoadModuleEx;
 
   // SymSetOptions()
@@ -468,11 +470,11 @@ private:
     BOOL   keepGoing;
 
 #ifdef _UNICODE
-	static const char strModule32First[] = "Module32FirstW";
-	static const char strModule32Next[] = "Module32NextW";
+    static const char strModule32First[] = "Module32FirstW";
+    static const char strModule32Next[] = "Module32NextW";
  #else
-	static const char strModule32First[] = "Module32First";
-	static const char strModule32Next[] = "Module32Next";
+    static const char strModule32First[] = "Module32First";
+    static const char strModule32Next[] = "Module32Next";
 #endif
     for (size_t i = 0; i < (sizeof(dllname) / sizeof(dllname[0])); i++)
     {
@@ -938,9 +940,9 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
 
-	tImageHelperSymbol* pSym = NULL;
+  PIMAGEHLP_SYMBOL64 pSym = NULL;
   StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
-  tImageHelperLine                           Line;
+  IMAGEHLP_LINE64                           Line;
   int                                       frameNum;
   bool                                      bLastEntryCalled = true;
   int                                       curRecursionCount = 0;
@@ -1025,11 +1027,11 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 #error "Platform not supported!"
 #endif
 
-  pSym = (tImageHelperSymbol*)malloc(sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
+  pSym = (PIMAGEHLP_SYMBOL64)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
   if (!pSym)
     goto cleanup; // not enough memory...
-  memset(pSym, 0, sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(tImageHelperSymbol);
+  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
   memset(&Line, 0, sizeof(Line));
@@ -1204,10 +1206,10 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   // Show object info (SymGetSymFromAddr64())
   DWORD64            dwAddress = DWORD64(pObject);
   DWORD64            dwDisplacement = 0;
-  tImageHelperSymbol* pSym =
-      (tImageHelperSymbol*)malloc(sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
-  memset(pSym, 0, sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(tImageHelperSymbol);
+  PIMAGEHLP_SYMBOL64 pSym =
+      (PIMAGEHLP_SYMBOL64)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
   if (this->m_sw->symGetSymFromAddr64(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
   {
