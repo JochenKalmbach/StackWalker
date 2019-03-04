@@ -110,10 +110,10 @@ static void MyStrCpy(TCHAR* szDest, size_t nMaxDestSize, const TCHAR* szSrc)
 } // MyStrCpy
 
 #ifdef _UNICODE
-  typedef IMAGEHLP_SYMBOLW64  tImageHelperSymbol;
+  typedef SYMBOL_INFOW   tSymbolInfo;
   typedef IMAGEHLP_LINEW64  tImageHelperLine;
 #else
-  typedef IMAGEHLP_SYMBOL64  tImageHelperSymbol;
+  typedef SYMBOL_INFO   tSymbolInfo;
   typedef IMAGEHLP_LINE64  tImageHelperLine;
 #endif
 
@@ -135,7 +135,7 @@ public:
     symGetModuleBase64 = NULL;
     symGetModuleInfo64 = NULL;
     symGetOptions = NULL;
-    symGetSymFromAddr64 = NULL;
+    symFromAddr = NULL;
     symInitialize = NULL;
     symLoadModuleEx = NULL;
     symSetOptions = NULL;
@@ -236,6 +236,7 @@ public:
     static const char strSymLoadModuleEx[] = "SymLoadModuleExW";
     static const char strSymGetLineFromAddr64[] = "SymGetLineFromAddrW64";
     static const char strSymGetModuleInfo64[] = "SymGetModuleInfoW64";
+    static const char strSymFromAddr[] = "SymFromAddrW";
 #else
     static const char strSymInitialize[] = "SymInitialize";
     static const char strUnDecorateSymbolName[] = "UnDecorateSymbolName";
@@ -243,6 +244,7 @@ public:
     static const char strSymLoadModuleEx[] = "SymLoadModuleEx";
     static const char strSymGetLineFromAddr64[] = "SymGetLineFromAddr64";
     static const char strSymGetModuleInfo64[] = "SymGetModuleInfo64";
+    static const char strSymFromAddr[] = "SymFromAddr";
 #endif
     symInitialize = (tSI)GetProcAddress(m_hDbhHelp, strSymInitialize);
     symCleanup = (tSC)GetProcAddress(m_hDbhHelp, "SymCleanup");
@@ -255,13 +257,13 @@ public:
     symGetLineFromAddr64 = (tSGLFA)GetProcAddress(m_hDbhHelp, strSymGetLineFromAddr64);
     symGetModuleBase64 = (tSGMB)GetProcAddress(m_hDbhHelp, "SymGetModuleBase64");
     symGetModuleInfo64 = (tSGMI)GetProcAddress(m_hDbhHelp, strSymGetModuleInfo64);
-    symGetSymFromAddr64 = (tSGSFA)GetProcAddress(m_hDbhHelp, "SymGetSymFromAddr64");
+    symFromAddr = (tSFA)GetProcAddress(m_hDbhHelp, strSymFromAddr);
     unDecorateSymbolName = (tUDSN)GetProcAddress(m_hDbhHelp, strUnDecorateSymbolName);
     symLoadModuleEx = (tSLM)GetProcAddress(m_hDbhHelp, strSymLoadModuleEx);
     symGetSearchPath = (tSGSP)GetProcAddress(m_hDbhHelp, strSymGetSearchPath);
 
     if (symCleanup == NULL || symFunctionTableAccess64 == NULL || symGetModuleBase64 == NULL || symGetModuleInfo64 == NULL || symGetOptions == NULL ||
-        symGetSymFromAddr64 == NULL || symInitialize == NULL || symSetOptions == NULL || stackWalk64 == NULL || unDecorateSymbolName == NULL ||
+        symFromAddr == NULL || symInitialize == NULL || symSetOptions == NULL || stackWalk64 == NULL || unDecorateSymbolName == NULL ||
         symLoadModuleEx == NULL)
     {
       FreeLibrary(m_hDbhHelp);
@@ -379,11 +381,11 @@ public:
 
 
   // SymGetSymFromAddr64()
-  typedef BOOL(__stdcall* tSGSFA)(IN HANDLE hProcess,
-                                  IN DWORD64 dwAddr,
+  typedef BOOL(__stdcall* tSFA)(IN HANDLE hProcess,
+                                  IN DWORD64 Address,
                                   OUT PDWORD64 pdwDisplacement,
-                                  OUT tImageHelperSymbol* Symbol);
-  tSGSFA symGetSymFromAddr64;
+                                  OUT tSymbolInfo* Symbol);
+  tSFA symFromAddr;
 
   // SymInitialize()
   typedef BOOL(__stdcall* tSI)(IN HANDLE hProcess, IN PTSTR UserSearchPath, IN BOOL fInvadeProcess);
@@ -940,7 +942,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
 
-  tImageHelperSymbol* pSym = NULL;
+  tSymbolInfo* pSym = NULL;
   StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
   tImageHelperLine                           Line;
   int                                       frameNum;
@@ -1027,12 +1029,12 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 #error "Platform not supported!"
 #endif
 
-  pSym = (tImageHelperSymbol*)malloc(sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
+  pSym = (tSymbolInfo*)malloc(sizeof(tSymbolInfo) + STACKWALK_MAX_NAMELEN*sizeof(TCHAR));
   if (!pSym)
     goto cleanup; // not enough memory...
-  memset(pSym, 0, sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(tImageHelperSymbol);
-  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
+  memset(pSym, 0, sizeof(tSymbolInfo) + STACKWALK_MAX_NAMELEN*sizeof(TCHAR));
+  pSym->SizeOfStruct = sizeof(tSymbolInfo);
+  pSym->MaxNameLen = STACKWALK_MAX_NAMELEN;
 
   memset(&Line, 0, sizeof(Line));
   Line.SizeOfStruct = sizeof(Line);
@@ -1080,7 +1082,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     {
       // we seem to have a valid PC
       // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->symGetSymFromAddr64(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol),
+      if (this->m_sw->symFromAddr(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol),
                              pSym) != FALSE)
       {
         MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
@@ -1200,18 +1202,18 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   }
 
   // SymGetSymFromAddr64() is required
-  if (this->m_sw->symGetSymFromAddr64 == NULL)
+  if (this->m_sw->symFromAddr == NULL)
     return FALSE;
 
   // Show object info (SymGetSymFromAddr64())
   DWORD64            dwAddress = DWORD64(pObject);
   DWORD64            dwDisplacement = 0;
-  tImageHelperSymbol* pSym =
-      (tImageHelperSymbol*)malloc(sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
-  memset(pSym, 0, sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(tImageHelperSymbol);
-  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
-  if (this->m_sw->symGetSymFromAddr64(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
+  tSymbolInfo* pSym =
+      (tSymbolInfo*)malloc(sizeof(tSymbolInfo) + STACKWALK_MAX_NAMELEN*sizeof(TCHAR));
+  memset(pSym, 0, sizeof(tSymbolInfo) + STACKWALK_MAX_NAMELEN*sizeof(TCHAR));
+  pSym->SizeOfStruct = sizeof(tSymbolInfo);
+  pSym->MaxNameLen = STACKWALK_MAX_NAMELEN;
+  if (this->m_sw->symFromAddr(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
   {
     this->OnDbgHelpErr(_T("SymGetSymFromAddr64"), GetLastError(), dwAddress);
     return FALSE;
