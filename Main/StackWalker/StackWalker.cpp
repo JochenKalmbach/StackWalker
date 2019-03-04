@@ -109,13 +109,13 @@ static void MyStrCpy(TCHAR* szDest, size_t nMaxDestSize, const TCHAR* szSrc)
   szDest[nMaxDestSize - 1] = 0;
 } // MyStrCpy
 
-//#ifdef _UNICODE
-//  typedef IMAGEHLP_SYMBOLW64  tImageHelperSymbol;
-//  typedef IMAGEHLP_LINEW64  tImageHelperLine;
-//#else
-//  typedef IMAGEHLP_SYMBOL64  tImageHelperSymbol;
-//  typedef IMAGEHLP_LINE64  tImageHelperLine;
-//#endif
+#ifdef _UNICODE
+  typedef IMAGEHLP_SYMBOLW64  tImageHelperSymbol;
+  typedef IMAGEHLP_LINEW64  tImageHelperLine;
+#else
+  typedef IMAGEHLP_SYMBOL64  tImageHelperSymbol;
+  typedef IMAGEHLP_LINE64  tImageHelperLine;
+#endif
 
 // Normally it should be enough to use 'CONTEXT_FULL' (better would be 'CONTEXT_ALL')
 #define USED_CONTEXT_FLAGS CONTEXT_FULL
@@ -360,7 +360,7 @@ public:
   typedef BOOL(__stdcall* tSGLFA)(IN HANDLE hProcess,
                                   IN DWORD64 dwAddr,
                                   OUT PDWORD pdwDisplacement,
-                                  OUT PIMAGEHLP_LINE64 Line);
+                                  OUT tImageHelperLine* Line);
   tSGLFA symGetLineFromAddr64;
 
   // SymGetModuleBase64()
@@ -382,7 +382,7 @@ public:
   typedef BOOL(__stdcall* tSGSFA)(IN HANDLE hProcess,
                                   IN DWORD64 dwAddr,
                                   OUT PDWORD64 pdwDisplacement,
-                                  OUT PIMAGEHLP_SYMBOL64 Symbol);
+                                  OUT tImageHelperSymbol* Symbol);
   tSGSFA symGetSymFromAddr64;
 
   // SymInitialize()
@@ -940,9 +940,9 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
 
-  PIMAGEHLP_SYMBOL64 pSym = NULL;
+  tImageHelperSymbol* pSym = NULL;
   StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
-  IMAGEHLP_LINE64                           Line;
+  tImageHelperLine                           Line;
   int                                       frameNum;
   bool                                      bLastEntryCalled = true;
   int                                       curRecursionCount = 0;
@@ -1027,11 +1027,11 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 #error "Platform not supported!"
 #endif
 
-  pSym = (PIMAGEHLP_SYMBOL64)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  pSym = (tImageHelperSymbol*)malloc(sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
   if (!pSym)
     goto cleanup; // not enough memory...
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+  memset(pSym, 0, sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
+  pSym->SizeOfStruct = sizeof(tImageHelperSymbol);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
   memset(&Line, 0, sizeof(Line));
@@ -1206,10 +1206,10 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   // Show object info (SymGetSymFromAddr64())
   DWORD64            dwAddress = DWORD64(pObject);
   DWORD64            dwDisplacement = 0;
-  PIMAGEHLP_SYMBOL64 pSym =
-      (PIMAGEHLP_SYMBOL64)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+  tImageHelperSymbol* pSym =
+      (tImageHelperSymbol*)malloc(sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
+  memset(pSym, 0, sizeof(tImageHelperSymbol) + STACKWALK_MAX_NAMELEN);
+  pSym->SizeOfStruct = sizeof(tImageHelperSymbol);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
   if (this->m_sw->symGetSymFromAddr64(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
   {
