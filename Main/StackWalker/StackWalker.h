@@ -137,18 +137,18 @@ protected:
   typedef struct CallstackEntry
   {
     DWORD64 offset; // if 0, we have no valid entry
-    CHAR    name[STACKWALK_MAX_NAMELEN];
-    CHAR    undName[STACKWALK_MAX_NAMELEN];
-    CHAR    undFullName[STACKWALK_MAX_NAMELEN];
+    TCHAR    name[STACKWALK_MAX_NAMELEN];
+    TCHAR    undName[STACKWALK_MAX_NAMELEN];
+    TCHAR    undFullName[STACKWALK_MAX_NAMELEN];
     DWORD64 offsetFromSmybol;
     DWORD   offsetFromLine;
     DWORD   lineNumber;
-    CHAR    lineFileName[STACKWALK_MAX_NAMELEN];
+    TCHAR    lineFileName[STACKWALK_MAX_NAMELEN];
     DWORD   symType;
     LPCSTR  symTypeString;
-    CHAR    moduleName[STACKWALK_MAX_NAMELEN];
+    TCHAR    moduleName[STACKWALK_MAX_NAMELEN];
     DWORD64 baseOfImage;
-    CHAR    loadedImageName[STACKWALK_MAX_NAMELEN];
+    TCHAR    loadedImageName[STACKWALK_MAX_NAMELEN];
   } CallstackEntry;
 
   typedef enum CallstackEntryType
@@ -158,18 +158,18 @@ protected:
     lastEntry
   } CallstackEntryType;
 
-  virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
-  virtual void OnLoadModule(LPCSTR    img,
-                            LPCSTR    mod,
+  virtual void OnSymInit(LPCTSTR szSearchPath, DWORD symOptions, LPCTSTR szUserName);
+  virtual void OnLoadModule(LPCTSTR    img,
+                            LPCTSTR    mod,
                             DWORD64   baseAddr,
                             DWORD     size,
                             DWORD     result,
-                            LPCSTR    symType,
-                            LPCSTR    pdbName,
+                            LPCTSTR    symType,
+                            LPCTSTR    pdbName,
                             ULONGLONG fileVersion);
   virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry& entry);
-  virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
-  virtual void OnOutput(LPCSTR szText);
+  virtual void OnDbgHelpErr(LPCTSTR szFuncName, DWORD gle, DWORD64 addr);
+  virtual void OnOutput(LPCTSTR szText);
 
   StackWalkerInternal* m_sw;
   HANDLE               m_hProcess;
