@@ -96,7 +96,7 @@ public:
   } StackWalkOptions;
 
   StackWalker(int    options = OptionsAll, // 'int' is by design, to combine the enum-flags
-              LPCSTR szSymPath = NULL,
+              LPCTSTR szSymPath = NULL,
               DWORD  dwProcessId = GetCurrentProcessId(),
               HANDLE hProcess = GetCurrentProcess());
   StackWalker(DWORD dwProcessId, HANDLE hProcess);
@@ -175,7 +175,7 @@ protected:
   HANDLE               m_hProcess;
   DWORD                m_dwProcessId;
   BOOL                 m_modulesLoaded;
-  LPSTR                m_szSymPath;
+  LPTSTR               m_szSymPath;
 
   int m_options;
   int m_MaxRecursionCount;
