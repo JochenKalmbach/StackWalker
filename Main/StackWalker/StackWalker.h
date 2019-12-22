@@ -47,16 +47,6 @@
 #pragma warning(disable : 4091)
 #endif
 
-// special defines for VC5/6 (if no actual PSDK is installed):
-#if _MSC_VER < 1300
-typedef unsigned __int64 DWORD64, *PDWORD64;
-#if defined(_WIN64)
-typedef unsigned __int64 SIZE_T, *PSIZE_T;
-#else
-typedef unsigned long SIZE_T, *PSIZE_T;
-#endif
-#endif // _MSC_VER < 1300
-
 class StackWalkerInternal; // forward
 class StackWalker
 {
@@ -96,7 +86,7 @@ public:
   } StackWalkOptions;
 
   StackWalker(int    options = OptionsAll, // 'int' is by design, to combine the enum-flags
-              LPCSTR szSymPath = NULL,
+              LPCTSTR szSymPath = NULL,
               DWORD  dwProcessId = GetCurrentProcessId(),
               HANDLE hProcess = GetCurrentProcess());
   StackWalker(DWORD dwProcessId, HANDLE hProcess);
@@ -137,18 +127,18 @@ protected:
   typedef struct CallstackEntry
   {
     DWORD64 offset; // if 0, we have no valid entry
-    CHAR    name[STACKWALK_MAX_NAMELEN];
-    CHAR    undName[STACKWALK_MAX_NAMELEN];
-    CHAR    undFullName[STACKWALK_MAX_NAMELEN];
+    TCHAR    name[STACKWALK_MAX_NAMELEN];
+    TCHAR    undName[STACKWALK_MAX_NAMELEN];
+    TCHAR    undFullName[STACKWALK_MAX_NAMELEN];
     DWORD64 offsetFromSmybol;
     DWORD   offsetFromLine;
     DWORD   lineNumber;
-    CHAR    lineFileName[STACKWALK_MAX_NAMELEN];
+    TCHAR    lineFileName[STACKWALK_MAX_NAMELEN];
     DWORD   symType;
     LPCSTR  symTypeString;
-    CHAR    moduleName[STACKWALK_MAX_NAMELEN];
+    TCHAR    moduleName[STACKWALK_MAX_NAMELEN];
     DWORD64 baseOfImage;
-    CHAR    loadedImageName[STACKWALK_MAX_NAMELEN];
+    TCHAR    loadedImageName[STACKWALK_MAX_NAMELEN];
   } CallstackEntry;
 
   typedef enum CallstackEntryType
@@ -158,24 +148,24 @@ protected:
     lastEntry
   } CallstackEntryType;
 
-  virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
-  virtual void OnLoadModule(LPCSTR    img,
-                            LPCSTR    mod,
+  virtual void OnSymInit(LPCTSTR szSearchPath, DWORD symOptions, LPCTSTR szUserName);
+  virtual void OnLoadModule(LPCTSTR    img,
+                            LPCTSTR    mod,
                             DWORD64   baseAddr,
                             DWORD     size,
                             DWORD     result,
-                            LPCSTR    symType,
-                            LPCSTR    pdbName,
+                            LPCTSTR    symType,
+                            LPCTSTR    pdbName,
                             ULONGLONG fileVersion);
   virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry& entry);
-  virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
-  virtual void OnOutput(LPCSTR szText);
+  virtual void OnDbgHelpErr(LPCTSTR szFuncName, DWORD gle, DWORD64 addr);
+  virtual void OnOutput(LPCTSTR szText);
 
   StackWalkerInternal* m_sw;
   HANDLE               m_hProcess;
   DWORD                m_dwProcessId;
   BOOL                 m_modulesLoaded;
-  LPSTR                m_szSymPath;
+  LPTSTR               m_szSymPath;
 
   int m_options;
   int m_MaxRecursionCount;
