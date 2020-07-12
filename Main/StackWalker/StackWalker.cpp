@@ -998,11 +998,11 @@ BOOL StackWalker::LoadModules()
         strcat_s(szSymPath, nSymPathLen, "SRV*");
         strcat_s(szSymPath, nSymPathLen, szTemp);
         strcat_s(szSymPath, nSymPathLen, "\\websymbols");
-        strcat_s(szSymPath, nSymPathLen, "*http://msdl.microsoft.com/download/symbols;");
+        strcat_s(szSymPath, nSymPathLen, "*https://msdl.microsoft.com/download/symbols;");
       }
       else
         strcat_s(szSymPath, nSymPathLen,
-                 "SRV*c:\\websymbols*http://msdl.microsoft.com/download/symbols;");
+                 "SRV*c:\\websymbols*https://msdl.microsoft.com/download/symbols;");
     }
   } // if SymBuildPath
 
