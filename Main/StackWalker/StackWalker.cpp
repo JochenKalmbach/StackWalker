@@ -649,7 +649,7 @@ private:
     //ModuleEntry e;
     DWORD        cbNeeded;
     MODULEINFO   mi;
-    HMODULE*     hMods = 0;
+    HMODULE*     hMods = NULL;
     char*        tt = NULL;
     char*        tt2 = NULL;
     const SIZE_T TTBUFLEN = 8096;
@@ -1304,9 +1304,11 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   // Show object info (SymGetSymFromAddr64())
   DWORD64            dwAddress = DWORD64(pObject);
   DWORD64            dwDisplacement = 0;
-  IMAGEHLP_SYMBOL64* pSym =
-      (IMAGEHLP_SYMBOL64*)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  const SIZE_T       symSize = sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN;
+  IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64*) malloc(symSize);
+  if (!pSym)
+    return FALSE;
+  memset(pSym, 0, symSize);
   pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
   if (this->m_sw->pSGSFA(this->m_hProcess, dwAddress, &dwDisplacement, pSym) == FALSE)
