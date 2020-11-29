@@ -88,7 +88,10 @@
 #include <stdlib.h>
 #include <tchar.h>
 #include <windows.h>
+#include <new>
+
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
+
 #pragma warning(disable : 4826)
 #if _MSC_VER >= 1900
 #pragma warning(disable : 4091)   // For fix unnamed enums from DbgHelp.h
@@ -877,7 +880,12 @@ bool StackWalker::Init(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE 
   this->m_sw = NULL;
   SetTargetProcess(dwProcessId, hProcess);
   SetSymPath(szSymPath);
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
+  /* MSVC ignore std::nothrow specifier for `new` operator */
+  LPVOID buf = malloc(sizeof(StackWalkerInternal));
+  if (!buf)
+    return false;
+  memset(buf, 0, sizeof(StackWalkerInternal));
+  this->m_sw = new(buf) StackWalkerInternal(this, this->m_hProcess);  // placement new
   return true;
 }
 
@@ -894,8 +902,10 @@ StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDL
 StackWalker::~StackWalker()
 {
   SetSymPath(NULL);
-  if (m_sw != NULL)
-    delete m_sw;
+  if (m_sw != NULL) {
+    m_sw->~StackWalkerInternal();  // call the object's destructor
+    free(m_sw);
+  }
   m_sw = NULL;
 }
 
