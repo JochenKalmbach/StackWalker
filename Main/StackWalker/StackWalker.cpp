@@ -255,7 +255,7 @@ static void MyStrCpy(char* szDest, size_t nMaxDestSize, const char* szSrc)
 class StackWalkerInternal
 {
 public:
-  StackWalkerInternal(StackWalker* parent, HANDLE hProcess)
+  StackWalkerInternal(StackWalker* parent, HANDLE hProcess, PCONTEXT ctx)
   {
     m_parent = parent;
     m_hDbhHelp = NULL;
@@ -273,6 +273,9 @@ public:
     pSW = NULL;
     pUDSN = NULL;
     pSGSP = NULL;
+    m_ctx.ContextFlags = 0;
+    if (ctx != NULL)
+      m_ctx = *ctx;
   }
 
   ~StackWalkerInternal()
@@ -411,6 +414,7 @@ public:
 
   StackWalker* m_parent;
 
+  CONTEXT m_ctx;
   HMODULE m_hDbhHelp;
   HANDLE  m_hProcess;
 
@@ -871,8 +875,36 @@ public:
 };
 
 // #############################################################
-bool StackWalker::Init(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess)
+
+#if defined(_MSC_VER) && _MSC_VER >= 1400 && _MSC_VER < 1900
+extern "C" void* __cdecl _getptd();
+#endif
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+extern "C" void** __cdecl __current_exception_context();
+#endif
+
+static PCONTEXT get_current_exception_context()
 {
+  PCONTEXT * pctx = NULL;
+#if defined(_MSC_VER) && _MSC_VER >= 1400 && _MSC_VER < 1900  
+  LPSTR ptd = (LPSTR)_getptd();
+  if (ptd)
+    pctx = (PCONTEXT *)(ptd + (sizeof(void*) == 4 ? 0x8C : 0xF8));
+#endif
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+  pctx = (PCONTEXT *)__current_exception_context();
+#endif
+  return pctx ? *pctx : NULL;
+}
+
+bool StackWalker::Init(ExceptType extype, int options, LPCSTR szSymPath, DWORD dwProcessId,
+                       HANDLE hProcess, PEXCEPTION_POINTERS exp)
+{
+  PCONTEXT ctx = NULL;
+  if (extype == AfterCatch)
+    ctx = get_current_exception_context();
+  if (extype == AfterExcept && exp)
+    ctx = exp->ContextRecord;
   this->m_options = options;
   this->m_modulesLoaded = FALSE;
   this->m_szSymPath = NULL;
@@ -885,18 +917,23 @@ bool StackWalker::Init(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE 
   if (!buf)
     return false;
   memset(buf, 0, sizeof(StackWalkerInternal));
-  this->m_sw = new(buf) StackWalkerInternal(this, this->m_hProcess);  // placement new
+  this->m_sw = new(buf) StackWalkerInternal(this, this->m_hProcess, ctx);  // placement new
   return true;
 }
 
 StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
 {
-  Init(OptionsAll, NULL, dwProcessId, hProcess);
+  Init(NonExcept, OptionsAll, NULL, dwProcessId, hProcess);
 }
 
 StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess)
 {
-  Init(options, szSymPath, dwProcessId, hProcess);
+  Init(NonExcept, options, szSymPath, dwProcessId, hProcess);
+}
+
+StackWalker::StackWalker(ExceptType extype, int options, PEXCEPTION_POINTERS exp)
+{
+  Init(extype, options, NULL, GetCurrentProcessId(), GetCurrentProcess(), exp);
 }
 
 StackWalker::~StackWalker()
@@ -1092,7 +1129,10 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     if (GetThreadId(hThread) == GetCurrentThreadId())
 #endif
     {
-      GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, USED_CONTEXT_FLAGS);
+      if (m_sw->m_ctx.ContextFlags != 0)
+        c = m_sw->m_ctx;   // context taken at Init
+      else
+        GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, USED_CONTEXT_FLAGS);
     }
     else
     {

@@ -57,6 +57,13 @@ class StackWalkerInternal; // forward
 class StackWalker
 {
 public:
+  typedef enum ExceptType
+  {
+    NonExcept   = 0,     // RtlCaptureContext
+    AfterExcept = 1,
+    AfterCatch  = 2,     // get_current_exception_context
+  } ExceptType;
+
   typedef enum StackWalkOptions
   {
     // No addition info will be retrieved
@@ -91,6 +98,8 @@ public:
     OptionsAll = 0x3F
   } StackWalkOptions;
 
+  StackWalker(ExceptType extype, int options, PEXCEPTION_POINTERS exp = NULL);
+
   StackWalker(int    options = OptionsAll, // 'int' is by design, to combine the enum-flags
               LPCSTR szSymPath = NULL,
               DWORD  dwProcessId = GetCurrentProcessId(),
@@ -105,7 +114,8 @@ public:
   bool SetTargetProcess(DWORD dwProcessId, HANDLE hProcess);
 
 private:
-  bool Init(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess);
+  bool Init(ExceptType extype, int options, LPCSTR szSymPath, DWORD dwProcessId,
+            HANDLE hProcess, PEXCEPTION_POINTERS exp = NULL);
 
 public:
   typedef BOOL(__stdcall* PReadProcessMemoryRoutine)(
