@@ -98,7 +98,7 @@ public:
     OptionsAll = 0x3F
   } StackWalkOptions;
 
-  StackWalker(ExceptType extype, int options, PEXCEPTION_POINTERS exp = NULL);
+  StackWalker(ExceptType extype, int options = OptionsAll, PEXCEPTION_POINTERS exp = NULL);
 
   StackWalker(int    options = OptionsAll, // 'int' is by design, to combine the enum-flags
               LPCSTR szSymPath = NULL,
@@ -112,6 +112,8 @@ public:
   bool SetSymPath(LPCSTR szSymPath);
 
   bool SetTargetProcess(DWORD dwProcessId, HANDLE hProcess);
+
+  PCONTEXT GetCurrentExceptionContext();
 
 private:
   bool Init(ExceptType extype, int options, LPCSTR szSymPath, DWORD dwProcessId,

@@ -968,6 +968,11 @@ bool StackWalker::SetTargetProcess(DWORD dwProcessId, HANDLE hProcess)
   return true;
 }
 
+PCONTEXT StackWalker::GetCurrentExceptionContext()
+{
+  return get_current_exception_context();
+}
+
 BOOL StackWalker::LoadModules()
 {
   if (this->m_sw == NULL)
