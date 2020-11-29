@@ -258,7 +258,6 @@ public:
     m_hDbhHelp = NULL;
     pSC = NULL;
     m_hProcess = hProcess;
-    m_szSymPath = NULL;
     pSFTA = NULL;
     pSGLFA = NULL;
     pSGMB = NULL;
@@ -272,6 +271,7 @@ public:
     pUDSN = NULL;
     pSGSP = NULL;
   }
+
   ~StackWalkerInternal()
   {
     if (pSC != NULL)
@@ -280,10 +280,8 @@ public:
       FreeLibrary(m_hDbhHelp);
     m_hDbhHelp = NULL;
     m_parent = NULL;
-    if (m_szSymPath != NULL)
-      free(m_szSymPath);
-    m_szSymPath = NULL;
   }
+
   BOOL Init(LPCSTR szSymPath)
   {
     if (m_parent == NULL)
@@ -384,9 +382,7 @@ public:
     }
 
     // SymInitialize
-    if (szSymPath != NULL)
-      m_szSymPath = _strdup(szSymPath);
-    if (this->pSI(m_hProcess, m_szSymPath, FALSE) == FALSE)
+    if (this->pSI(m_hProcess, szSymPath, FALSE) == FALSE)
       this->m_parent->OnDbgHelpErr("SymInitialize", GetLastError(), 0);
 
     DWORD symOptions = this->pSGO(); // SymGetOptions
@@ -414,7 +410,6 @@ public:
 
   HMODULE m_hDbhHelp;
   HANDLE  m_hProcess;
-  LPSTR   m_szSymPath;
 
 #pragma pack(push, 8)
   typedef struct _IMAGEHLP_MODULE64_V3
@@ -498,14 +493,14 @@ public:
   tSGSFA pSGSFA;
 
   // SymInitialize()
-  typedef BOOL(__stdcall* tSI)(IN HANDLE hProcess, IN PSTR UserSearchPath, IN BOOL fInvadeProcess);
+  typedef BOOL(__stdcall* tSI)(IN HANDLE hProcess, IN LPCSTR UserSearchPath, IN BOOL fInvadeProcess);
   tSI pSI;
 
   // SymLoadModule64()
   typedef DWORD64(__stdcall* tSLM)(IN HANDLE hProcess,
                                    IN HANDLE hFile,
-                                   IN PSTR ImageName,
-                                   IN PSTR ModuleName,
+                                   IN LPCSTR ImageName,
+                                   IN LPCSTR ModuleName,
                                    IN DWORD64 BaseOfDll,
                                    IN DWORD SizeOfDll);
   tSLM pSLM;
@@ -873,41 +868,57 @@ public:
 };
 
 // #############################################################
-StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
-{
-  this->m_options = OptionsAll;
-  this->m_modulesLoaded = FALSE;
-  this->m_hProcess = hProcess;
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
-  this->m_dwProcessId = dwProcessId;
-  this->m_szSymPath = NULL;
-  this->m_MaxRecursionCount = 1000;
-}
-StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess)
+bool StackWalker::Init(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess)
 {
   this->m_options = options;
   this->m_modulesLoaded = FALSE;
-  this->m_hProcess = hProcess;
-  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
-  this->m_dwProcessId = dwProcessId;
-  if (szSymPath != NULL)
-  {
-    this->m_szSymPath = _strdup(szSymPath);
-    this->m_options |= SymBuildPath;
-  }
-  else
-    this->m_szSymPath = NULL;
+  this->m_szSymPath = NULL;
   this->m_MaxRecursionCount = 1000;
+  this->m_sw = NULL;
+  SetTargetProcess(dwProcessId, hProcess);
+  SetSymPath(szSymPath);
+  this->m_sw = new StackWalkerInternal(this, this->m_hProcess);
+  return true;
+}
+
+StackWalker::StackWalker(DWORD dwProcessId, HANDLE hProcess)
+{
+  Init(OptionsAll, NULL, dwProcessId, hProcess);
+}
+
+StackWalker::StackWalker(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess)
+{
+  Init(options, szSymPath, dwProcessId, hProcess);
 }
 
 StackWalker::~StackWalker()
 {
-  if (m_szSymPath != NULL)
+  SetSymPath(NULL);
+  if (m_sw != NULL)
+    delete m_sw;
+  m_sw = NULL;
+}
+
+bool StackWalker::SetSymPath(LPCSTR szSymPath)
+{
+  if (m_szSymPath)
     free(m_szSymPath);
   m_szSymPath = NULL;
-  if (this->m_sw != NULL)
-    delete this->m_sw;
-  this->m_sw = NULL;
+  if (szSymPath == NULL)
+    return true;
+  m_szSymPath = _strdup(szSymPath);
+  if (m_szSymPath)
+    m_options |= SymBuildPath;
+  return true;
+}
+
+bool StackWalker::SetTargetProcess(DWORD dwProcessId, HANDLE hProcess)
+{
+  m_dwProcessId = dwProcessId;
+  m_hProcess = hProcess;
+  if (m_sw)
+    m_sw->m_hProcess = hProcess;
+  return true;
 }
 
 BOOL StackWalker::LoadModules()

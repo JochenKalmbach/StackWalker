@@ -95,9 +95,19 @@ public:
               LPCSTR szSymPath = NULL,
               DWORD  dwProcessId = GetCurrentProcessId(),
               HANDLE hProcess = GetCurrentProcess());
+
   StackWalker(DWORD dwProcessId, HANDLE hProcess);
+
   virtual ~StackWalker();
 
+  bool SetSymPath(LPCSTR szSymPath);
+
+  bool SetTargetProcess(DWORD dwProcessId, HANDLE hProcess);
+
+private:
+  bool Init(int options, LPCSTR szSymPath, DWORD dwProcessId, HANDLE hProcess);
+
+public:
   typedef BOOL(__stdcall* PReadProcessMemoryRoutine)(
       HANDLE  hProcess,
       DWORD64 qwBaseAddress,
