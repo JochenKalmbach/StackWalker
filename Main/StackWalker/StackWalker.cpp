@@ -256,6 +256,7 @@ public:
     pSC = NULL;
     m_hProcess = hProcess;
     m_szSymPath = NULL;
+    m_SymInitialized = FALSE;
     pSFTA = NULL;
     pSGLFA = NULL;
     pSGMB = NULL;
@@ -271,7 +272,7 @@ public:
   }
   ~StackWalkerInternal()
   {
-    if (pSC != NULL)
+    if (pSC != NULL && m_SymInitialized != FALSE)
       pSC(m_hProcess); // SymCleanup
     if (m_hDbhHelp != NULL)
       FreeLibrary(m_hDbhHelp);
@@ -383,7 +384,9 @@ public:
     // SymInitialize
     if (szSymPath != NULL)
       m_szSymPath = _strdup(szSymPath);
-    if (this->pSI(m_hProcess, m_szSymPath, FALSE) == FALSE)
+    
+    m_SymInitialized = this->pSI(m_hProcess, m_szSymPath, FALSE);
+    if (m_SymInitialized == FALSE)
       this->m_parent->OnDbgHelpErr("SymInitialize", GetLastError(), 0);
 
     DWORD symOptions = this->pSGO(); // SymGetOptions
@@ -412,6 +415,7 @@ public:
   HMODULE m_hDbhHelp;
   HANDLE  m_hProcess;
   LPSTR   m_szSymPath;
+  BOOL    m_SymInitialized;
 
 #pragma pack(push, 8)
   typedef struct IMAGEHLP_MODULE64_V3
