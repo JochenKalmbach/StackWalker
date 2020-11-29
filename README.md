@@ -121,7 +121,8 @@ class StackWalker
 protected:
     virtual void OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUserName);
     virtual void OnLoadModule(LPCSTR img, LPCSTR mod, DWORD64 baseAddr, DWORD size,
-    DWORD result, LPCSTR symType, LPCSTR pdbName, ULONGLONG fileVersion);
+                              DWORD result, LPCSTR symType, LPCSTR pdbName,
+                              ULONGLONG fileVersion);
     virtual void OnCallstackEntry(CallstackEntryType eType, CallstackEntry &entry);
     virtual void OnDbgHelpErr(LPCSTR szFuncName, DWORD gle, DWORD64 addr);
 };
@@ -140,9 +141,12 @@ public:
                 LPCSTR szSymPath = NULL,
                 DWORD dwProcessId = GetCurrentProcessId(),
                 HANDLE hProcess = GetCurrentProcess());
-    // Just for other processes with
-    // default-values for options and symPath
+    
+    // Just for other processes with default-values for options and symPath
     StackWalker(DWORD dwProcessId, HANDLE hProcess);
+    
+    // For showing stack trace after __except or catch
+    StackWalker(ExceptType extype, int options = OptionsAll, PEXCEPTION_POINTERS exp = NULL);
 };
 ```
 
@@ -159,7 +163,7 @@ public:
 
 ### Displaying the callstack of an exception
 
-With this `StackWalker` you can also display the callstack inside an exception handler. You only need to write a filter-function which does the stack-walking:
+With this `StackWalker` you can also display the callstack inside an structured exception handler. You only need to write a filter-function which does the stack-walking:
 
 ```c++
 // The exception filter function:
@@ -177,6 +181,25 @@ __try
 }
 __except (ExpFilter(GetExceptionInformation(), GetExceptionCode()))
 {
+}
+```
+
+Display the callstack inside an C++ exception handler (two ways):
+```c++
+// This is how to catch an exception:
+try
+{
+    // do some ugly stuff...
+}
+catch (std::exception & ex)
+{
+    StackWalker sw;
+    sw.ShowCallstack(GetCurrentThread(), sw.GetCurrentExceptionContext());
+}
+catch (...)
+{
+    StackWalker sw(StackWalker::AfterCatch);
+    sw.ShowCallstack();
 }
 ```
 
