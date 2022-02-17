@@ -213,9 +213,8 @@ protected:
                                       DWORD   nSize,
                                       LPDWORD lpNumberOfBytesRead);
 
-  static PVOID __stdcall myFunctionTableAccessFunction(
-                                      HANDLE hProcess,
-                                      DWORD64 AddrBase);
+  static PVOID __stdcall myFunctionTableAccessFunction(HANDLE hProcess,
+                                                       DWORD64 AddrBase);
 
   friend StackWalkerInternal;
 }; // class StackWalker

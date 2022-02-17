@@ -91,6 +91,7 @@
 #include <new>
 
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
+#pragma comment(lib, "dbghelp.lib")
 
 #pragma warning(disable : 4826)
 #if _MSC_VER >= 1900
