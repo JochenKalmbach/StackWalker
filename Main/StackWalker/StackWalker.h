@@ -42,6 +42,7 @@
 #pragma once
 
 #include <windows.h>
+#include <DbgHelp.h>
 
 // special defines for VC5/6 (if no actual PSDK is installed):
 #if _MSC_VER < 1300
@@ -129,13 +130,21 @@ public:
       LPVOID  pUserData // optional data, which was passed in "ShowCallstack"
   );
 
+  typedef PVOID(__stdcall* PFunctionTableAccessRoutine)(
+      HANDLE hProcess,
+      DWORD64 AddrBase,
+      LPVOID  pUserData // optional data, which was passed in "ShowCallstack"
+  );
+
   BOOL LoadModules();
 
   BOOL ShowCallstack(
       HANDLE                    hThread = GetCurrentThread(),
       const CONTEXT*            context = NULL,
       PReadProcessMemoryRoutine readMemoryFunction = NULL,
-      LPVOID pUserData = NULL // optional to identify some data in the 'readMemoryFunction'-callback
+      LPVOID pUserData = NULL, // optional to identify some data in the 'readMemoryFunction'-callback
+      PFunctionTableAccessRoutine functionTableAccessFunction = NULL,
+      LPVOID s_functionTableAccessFunction_UserData = NULL  // optional to identify some data in the 'readMemoryFunction'-callback
   );
 
   BOOL ShowObject(LPVOID pObject);
@@ -204,7 +213,12 @@ protected:
                                       DWORD   nSize,
                                       LPDWORD lpNumberOfBytesRead);
 
+  static PVOID __stdcall myFunctionTableAccessFunction(
+                                      HANDLE hProcess,
+                                      DWORD64 AddrBase);
+
   friend StackWalkerInternal;
+  static PVOID MySymFunctionTableAccess64(HANDLE ahProcess, DWORD64 AddrBase);
 }; // class StackWalker
 
 // The "ugly" assembler-implementation is needed for systems before XP

@@ -1097,10 +1097,16 @@ BOOL StackWalker::LoadModules()
 static StackWalker::PReadProcessMemoryRoutine s_readMemoryFunction = NULL;
 static LPVOID                                 s_readMemoryFunction_UserData = NULL;
 
+// Similar to the readMemoryFunction one may want to provide its own function table access function
+static StackWalker::PFunctionTableAccessRoutine s_functionTableAccessFunction = NULL;
+static LPVOID s_functionTableAccessFunction_UserData = NULL;
+
 BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
                                 const CONTEXT*            context,
                                 PReadProcessMemoryRoutine readMemoryFunction,
-                                LPVOID                    pUserData)
+                                LPVOID                    pUserData,
+                                PFunctionTableAccessRoutine functionTableAccessFunction,
+                                LPVOID s_functionTableAccessFunction_UserData)
 {
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
@@ -1122,6 +1128,8 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 
   s_readMemoryFunction = readMemoryFunction;
   s_readMemoryFunction_UserData = pUserData;
+  s_functionTableAccessFunction = functionTableAccessFunction;
+  s_functionTableAccessFunction_UserData = pUserData;
 
   if (context == NULL)
   {
@@ -1215,7 +1223,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     // deeper frame could not be found.
     // CONTEXT need not to be supplied if imageTyp is IMAGE_FILE_MACHINE_I386!
     if (!this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem,
-                         this->m_sw->pSFTA, this->m_sw->pSGMB, NULL))
+                         myFunctionTableAccessFunction, this->m_sw->pSGMB, NULL))
     {
       // INFO: "StackWalk64" does not set "GetLastError"...
       this->OnDbgHelpErr("StackWalk64", 0, s.AddrPC.Offset);
@@ -1392,6 +1400,15 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   return TRUE;
 };
 
+PVOID __stdcall StackWalker::myFunctionTableAccessFunction(HANDLE hProcess,
+                                                           DWORD64 AddrBase){
+  if(s_functionTableAccessFunction == NULL){
+    return SymFunctionTableAccess64(hProcess, AddrBase);
+  } else {
+    return s_functionTableAccessFunction(hProcess, AddrBase, s_functionTableAccessFunction_UserData);
+  }
+}
+
 BOOL __stdcall StackWalker::myReadProcMem(HANDLE  hProcess,
                                           DWORD64 qwBaseAddress,
                                           PVOID   lpBuffer,
@@ -1537,4 +1554,12 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
 void StackWalker::OnOutput(LPCSTR buffer)
 {
   OutputDebugStringA(buffer);
+}
+
+PVOID StackWalker::MySymFunctionTableAccess64(HANDLE hProcess, DWORD64 AddrBase) {
+  PVOID addr = SymFunctionTableAccess64(hProcess, AddrBase);
+  DWORD64              ImageBase;
+  UNWIND_HISTORY_TABLE HistoryTable;
+  addr = RtlLookupFunctionEntry(AddrBase, &ImageBase, &HistoryTable);
+  return addr;
 }
