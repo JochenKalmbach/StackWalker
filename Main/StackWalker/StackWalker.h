@@ -218,7 +218,6 @@ protected:
                                       DWORD64 AddrBase);
 
   friend StackWalkerInternal;
-  static PVOID MySymFunctionTableAccess64(HANDLE ahProcess, DWORD64 AddrBase);
 }; // class StackWalker
 
 // The "ugly" assembler-implementation is needed for systems before XP

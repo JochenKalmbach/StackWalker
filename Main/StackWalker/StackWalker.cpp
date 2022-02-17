@@ -1549,11 +1549,3 @@ void StackWalker::OnOutput(LPCSTR buffer)
 {
   OutputDebugStringA(buffer);
 }
-
-PVOID StackWalker::MySymFunctionTableAccess64(HANDLE hProcess, DWORD64 AddrBase) {
-  PVOID addr = SymFunctionTableAccess64(hProcess, AddrBase);
-  DWORD64              ImageBase;
-  UNWIND_HISTORY_TABLE HistoryTable;
-  addr = RtlLookupFunctionEntry(AddrBase, &ImageBase, &HistoryTable);
-  return addr;
-}
