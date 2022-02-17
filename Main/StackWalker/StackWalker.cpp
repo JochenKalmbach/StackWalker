@@ -261,7 +261,6 @@ public:
     m_hDbhHelp = NULL;
     pSC = NULL;
     m_hProcess = hProcess;
-    pSFTA = NULL;
     pSGLFA = NULL;
     pSGMB = NULL;
     pSGMI = NULL;
@@ -368,7 +367,6 @@ public:
     pSGO = (tSGO)GetProcAddress(m_hDbhHelp, "SymGetOptions");
     pSSO = (tSSO)GetProcAddress(m_hDbhHelp, "SymSetOptions");
 
-    pSFTA = (tSFTA)GetProcAddress(m_hDbhHelp, "SymFunctionTableAccess64");
     pSGLFA = (tSGLFA)GetProcAddress(m_hDbhHelp, "SymGetLineFromAddr64");
     pSGMB = (tSGMB)GetProcAddress(m_hDbhHelp, "SymGetModuleBase64");
     pSGMI = (tSGMI)GetProcAddress(m_hDbhHelp, "SymGetModuleInfo64");
@@ -377,7 +375,7 @@ public:
     pSLM = (tSLM)GetProcAddress(m_hDbhHelp, "SymLoadModule64");
     pSGSP = (tSGSP)GetProcAddress(m_hDbhHelp, "SymGetSearchPath");
 
-    if (pSC == NULL || pSFTA == NULL || pSGMB == NULL || pSGMI == NULL || pSGO == NULL ||
+    if (pSC == NULL || pSGMB == NULL || pSGMI == NULL || pSGO == NULL ||
         pSGSFA == NULL || pSI == NULL || pSSO == NULL || pSW == NULL || pUDSN == NULL ||
         pSLM == NULL)
     {
@@ -466,10 +464,6 @@ public:
   // SymCleanup()
   typedef BOOL(__stdcall* tSC)(IN HANDLE hProcess);
   tSC pSC;
-
-  // SymFunctionTableAccess64()
-  typedef PVOID(__stdcall* tSFTA)(HANDLE hProcess, DWORD64 AddrBase);
-  tSFTA pSFTA;
 
   // SymGetLineFromAddr64()
   typedef BOOL(__stdcall* tSGLFA)(IN HANDLE hProcess,
@@ -1104,9 +1098,9 @@ static LPVOID s_functionTableAccessFunction_UserData = NULL;
 BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
                                 const CONTEXT*            context,
                                 PReadProcessMemoryRoutine readMemoryFunction,
-                                LPVOID                    pUserData,
+                                LPVOID                    pReadMemoryFunction_userData,
                                 PFunctionTableAccessRoutine functionTableAccessFunction,
-                                LPVOID s_functionTableAccessFunction_UserData)
+                                LPVOID pFunctionTableAccessFunction_UserData)
 {
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
@@ -1127,9 +1121,9 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   }
 
   s_readMemoryFunction = readMemoryFunction;
-  s_readMemoryFunction_UserData = pUserData;
+  s_readMemoryFunction_UserData = pReadMemoryFunction_userData;
   s_functionTableAccessFunction = functionTableAccessFunction;
-  s_functionTableAccessFunction_UserData = pUserData;
+  s_functionTableAccessFunction_UserData = pFunctionTableAccessFunction_UserData;
 
   if (context == NULL)
   {

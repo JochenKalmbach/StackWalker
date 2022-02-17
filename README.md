@@ -159,7 +159,7 @@ class StackWalker
 public:
     BOOL ShowCallstack(HANDLE hThread = GetCurrentThread(), CONTEXT *context = NULL,
                        PReadProcessMemoryRoutine readMemoryFunction = NULL, LPVOID pUserData = NULL,
-                       PFunctionTableAccessRoutine functionTableAccessFunction = NULL, LPVOID s_functionTableAccessFunction_UserData = NULL);
+                       PFunctionTableAccessRoutine functionTableAccessFunction = NULL, LPVOID pfunctionTableAccessFunction_UserData = NULL);
 };
 ```
 

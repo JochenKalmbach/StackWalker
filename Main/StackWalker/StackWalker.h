@@ -142,9 +142,9 @@ public:
       HANDLE                    hThread = GetCurrentThread(),
       const CONTEXT*            context = NULL,
       PReadProcessMemoryRoutine readMemoryFunction = NULL,
-      LPVOID pUserData = NULL, // optional to identify some data in the 'readMemoryFunction'-callback
+      LPVOID pReadMemoryFunction_userData = NULL, // optional to identify some data in the 'readMemoryFunction'-callback
       PFunctionTableAccessRoutine functionTableAccessFunction = NULL,
-      LPVOID s_functionTableAccessFunction_UserData = NULL  // optional to identify some data in the 'readMemoryFunction'-callback
+      LPVOID pFunctionTableAccessFunction_UserData = NULL  // optional to identify some data in the 'readMemoryFunction'-callback
   );
 
   BOOL ShowObject(LPVOID pObject);
