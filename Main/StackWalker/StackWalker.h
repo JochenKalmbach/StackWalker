@@ -136,6 +136,10 @@ public:
       LPVOID  pUserData // optional data, which was passed in "ShowCallstack"
   );
 
+  typedef DWORD64(__stdcall* PGetModuleBase)(IN HANDLE hProcess,
+          IN DWORD64 dwAddr,
+                                             LPVOID  pUserData);
+
   BOOL LoadModules();
 
   BOOL ShowCallstack(
@@ -144,8 +148,10 @@ public:
       PReadProcessMemoryRoutine readMemoryFunction = NULL,
       LPVOID pReadMemoryFunction_userData = NULL, // optional to identify some data in the 'readMemoryFunction'-callback
       PFunctionTableAccessRoutine functionTableAccessFunction = NULL,
-      LPVOID pFunctionTableAccessFunction_UserData = NULL  // optional to identify some data in the 'readMemoryFunction'-callback
-  );
+      LPVOID pFunctionTableAccessFunction_UserData = NULL,  // optional to identify some data in the 'readMemoryFunction'-callback
+      PGetModuleBase getModuleBaseFunction = NULL,
+      LPVOID pGetModuleBaseFunction_UserData = NULL
+              );
 
   BOOL ShowObject(LPVOID pObject);
 
@@ -215,6 +221,8 @@ protected:
 
   static PVOID __stdcall myFunctionTableAccessFunction(HANDLE hProcess,
                                                        DWORD64 AddrBase);
+
+  static DWORD64 __stdcall myGetModuleBaseFunction(HANDLE hProcess, DWORD64 dwAddr);
 
   friend StackWalkerInternal;
 }; // class StackWalker
