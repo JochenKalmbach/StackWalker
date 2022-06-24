@@ -85,7 +85,7 @@ void GlobalFunctionPointerTest()
 // http://blog.kalmbach-software.de/2008/04/02/unhandled-exceptions-in-vc8-and-above-for-x86-and-x64/
 // Even better: http://blog.kalmbach-software.de/2013/05/23/improvedpreventsetunhandledexceptionfilter/
 
-#if defined(_M_X64) || defined(_M_IX86)
+#if defined(_M_X64) || defined(_M_IX86) || defined(_M_ARM64)
 static BOOL PreventSetUnhandledExceptionFilter()
 {
   HMODULE hKernel32 = LoadLibrary(_T("kernel32.dll"));
@@ -104,6 +104,11 @@ static BOOL PreventSetUnhandledExceptionFilter()
   // 33 C0                xor         eax,eax
   // C3                   ret
   unsigned char szExecute[] = {0x33, 0xC0, 0xC3};
+#elif _M_ARM64  
+  unsigned char szExecute[] = {
+      0x00, 0x00, 0x80, 0x52, // mov     w0, #0
+      0xC0, 0x03, 0x5F, 0xD6 // ret       
+  };
 #else
 #error "The following code only works for x86 and x64!"
 #endif
@@ -123,7 +128,7 @@ static BOOL PreventSetUnhandledExceptionFilter()
   return bRet;
 }
 #else
-#pragma message("This code works only for x86 and x64!")
+#pragma message("This code works only for x86, x64 and arm64!")
 #endif
 
 static TCHAR s_szExceptionLogFileName[_MAX_PATH] = _T("\\exceptions.log"); // default
@@ -174,7 +179,7 @@ static void InitUnhandledExceptionFilter()
   {
     // set global exception handler (for handling all unhandled exceptions)
     SetUnhandledExceptionFilter(CrashHandlerExceptionFilter);
-#if defined _M_X64 || defined _M_IX86
+#if defined _M_X64 || defined _M_IX86 || defined _M_ARM64
     PreventSetUnhandledExceptionFilter();
 #endif
     s_bUnhandledExeptionFilterSet = TRUE;
