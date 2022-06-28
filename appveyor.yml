@@ -65,6 +65,6 @@ build_script:
   - if [%BUILDER%]==[msbuild] msbuild %SLN_NAME% %MS_BLD_ARGS% /logger:"%AVLOGGER%"
   - if not [%BUILDER%]==[msbuild] cmake --version
   - if not [%BUILDER%]==[msbuild] cmake -E make_directory "build-dir"
-  - if not [%BUILDER%]==[msbuild] cmake -E chdir "build-dir" cmake -G "%CMAKE_GENERATOR%" %%TARGET%% --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%APPVEYOR_BUILD_FOLDER%/root" ..
+  - if not [%BUILDER%]==[msbuild] cmake -E chdir "build-dir" cmake -G "%CMAKE_GENERATOR%" %TARGET% --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%APPVEYOR_BUILD_FOLDER%/root" ..
   - if not [%BUILDER%]==[msbuild] cmake --build "build-dir" --config RelWithDebInfo
   - if not [%BUILDER%]==[msbuild] cmake --build "build-dir" --target install --config RelWithDebInfo
