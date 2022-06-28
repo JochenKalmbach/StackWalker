@@ -22,6 +22,16 @@ environment:
     CMAKE_GENERATOR: "Visual Studio 15 2017"
   - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
     CMAKE_GENERATOR: "Visual Studio 15 2017 Win64"
+  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+    CMAKE_GENERATOR: "Visual Studio 17 2022"
+    TARGET: "-A Win32"
+  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+    CMAKE_GENERATOR: "Visual Studio 17 2022"
+    TARGET: "-A x64"
+  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2022
+    CMAKE_GENERATOR: "Visual Studio 17 2022"
+    TARGET: "-A ARM64"
+
 
 before_build:
   - if [%BUILDER%]==[msbuild] echo MSVC2008
@@ -55,6 +65,6 @@ build_script:
   - if [%BUILDER%]==[msbuild] msbuild %SLN_NAME% %MS_BLD_ARGS% /logger:"%AVLOGGER%"
   - if not [%BUILDER%]==[msbuild] cmake --version
   - if not [%BUILDER%]==[msbuild] cmake -E make_directory "build-dir"
-  - if not [%BUILDER%]==[msbuild] cmake -E chdir "build-dir" cmake -G "%CMAKE_GENERATOR%" --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%APPVEYOR_BUILD_FOLDER%/root" ..
+  - if not [%BUILDER%]==[msbuild] cmake -E chdir "build-dir" cmake -G "%CMAKE_GENERATOR%" %%TARGET%% --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX="%APPVEYOR_BUILD_FOLDER%/root" ..
   - if not [%BUILDER%]==[msbuild] cmake --build "build-dir" --config RelWithDebInfo
   - if not [%BUILDER%]==[msbuild] cmake --build "build-dir" --target install --config RelWithDebInfo
