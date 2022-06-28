@@ -12,8 +12,7 @@ environment:
     CONFIGURATION: "Release_VC9-UNICODE"
   - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
     CMAKE_GENERATOR: "Visual Studio 12 2013"
-  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
-    TARGET_CONFIG: "--config RelWithDebInfo"
+  - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013    
     CMAKE_GENERATOR: "Visual Studio 12 2013 Win64"
     TARGET_CONFIG: "--config RelWithDebInfo"
   - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
