@@ -91,6 +91,7 @@
 #include <new>
 #include <iostream>
 #include <atomic>
+#include <mutex>
 
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
 
@@ -1118,7 +1119,7 @@ void monitorFunc()
 
   // Inform startMonitorThread that thread was started
   {
-    std::unique_lock lock(monitorRequestMutex);
+    std::unique_lock<std::mutex> lock(monitorRequestMutex);
     monitorThreadStarted = true;
     monitorRequestCond.notify_one();
   }
@@ -1127,7 +1128,7 @@ void monitorFunc()
   {
     // Wait for next monitor request or request to stop
     {
-      std::unique_lock lock(monitorRequestMutex);
+      std::unique_lock<std::mutex> lock(monitorRequestMutex);
       monitorRequestCond.wait(lock, [] {
         return threadToSuspend != nullptr || requestToStopMonitorThread;
         });
@@ -1136,7 +1137,6 @@ void monitorFunc()
     {
       break;
     }
-    assert(threadToSuspend != nullptr);
 
     const DWORD threadId = GetThreadId(threadToSuspend);
 
@@ -1147,7 +1147,7 @@ void monitorFunc()
       if (previousSuspendCtr == ((DWORD) -1))
       {
         // Thread has been terminated
-        std::unique_lock lock(monitorRequestMutex);
+        std::unique_lock<std::mutex> lock(monitorRequestMutex);
         threadToSuspend = nullptr;
         monitorRequestCond.notify_one();
 
@@ -1165,7 +1165,7 @@ void monitorFunc()
 
     // Monitoring starts, inform stack trace creation thread
     {
-      std::unique_lock lock(monitorRequestMutex);
+      std::unique_lock<std::mutex> lock(monitorRequestMutex);
       threadSuspended = true;
       monitorRequestCond.notify_one();
     }
@@ -1173,7 +1173,7 @@ void monitorFunc()
     // Wait for at most 100 microseconds
     const int maxNumWaits = 100;
     {
-      std::unique_lock lock(monitorRequestMutex);
+      std::unique_lock<std::mutex> lock(monitorRequestMutex);
       if (!monitorRequestCond.wait_for(lock, std::chrono::microseconds(maxNumWaits), [] {
         // stop waiting when the stack trace creation thread has completed and
         // has cleared the 'threadSuspended' flag
@@ -1183,8 +1183,6 @@ void monitorFunc()
         foundPotentialDeadlock = true;
       }
     }
-
-    assert(threadToSuspend != nullptr);
 
     // Resume thread again
     previousSuspendCtr = ResumeThread(threadToSuspend);
@@ -1207,7 +1205,7 @@ void monitorFunc()
 
     // Monitoring finished, inform stack trace creation thread
     {
-      std::unique_lock lock(monitorRequestMutex);
+      std::unique_lock<std::mutex> lock(monitorRequestMutex);
       threadToSuspend = nullptr;
       threadSuspended = false;
       monitorRequestCond.notify_one();
@@ -1280,7 +1278,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT* context, PReadPro
         if (!isMonitorThread)
         {
           // Inform MonitorThread about new thread to suspend/resume
-          std::unique_lock lock(monitorRequestMutex);
+          std::unique_lock<std::mutex> lock(monitorRequestMutex);
           threadToSuspend = hThread;
           threadSuspended = false;
           monitorRequestCond.notify_one();
@@ -1323,7 +1321,7 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT* context, PReadPro
           if (threadToSuspend != nullptr)
           {
             // Wait for MonitorThread to resume thread
-            std::unique_lock lock(monitorRequestMutex);
+            std::unique_lock<std::mutex> lock(monitorRequestMutex);
             monitorRequestCond.wait(lock, [] {
               return threadToSuspend == nullptr;
               });
@@ -1418,13 +1416,13 @@ BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT* context, PReadPro
         // Inform MonitorThread that everything is fine
         // by clearing the 'threadSuspended' flag
         {
-          std::unique_lock lock(monitorRequestMutex);
+          std::unique_lock<std::mutex> lock(monitorRequestMutex);
           threadSuspended = false;
           monitorRequestCond.notify_one();
         }
 
         // Wait for MonitorThread to resume thread
-        std::unique_lock lock(monitorRequestMutex);
+        std::unique_lock<std::mutex> lock(monitorRequestMutex);
         monitorRequestCond.wait(lock, [] {
           return threadToSuspend == nullptr;
           });
@@ -1769,7 +1767,7 @@ void StackWalker::startMonitoringThread()
   else
   {
     // Wait for startup of thread ...
-    std::unique_lock lock(monitorRequestMutex);
+    std::unique_lock<std::mutex> lock(monitorRequestMutex);
     monitorThreadStarted = false;
     threadSuspended = false;
     threadToSuspend = nullptr;
@@ -1786,7 +1784,7 @@ void StackWalker::stopMonitoringThread()
   {
     // Inform MonitorThread to terminate
     {
-      std::unique_lock lock(monitorRequestMutex);
+      std::unique_lock<std::mutex> lock(monitorRequestMutex);
       requestToStopMonitorThread = true;
       monitorRequestCond.notify_one();
     }
