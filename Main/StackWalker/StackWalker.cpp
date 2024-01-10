@@ -89,6 +89,8 @@
 #include <tchar.h>
 #include <windows.h>
 #include <new>
+#include <iostream>
+#include <atomic>
 
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
 
@@ -1097,18 +1099,130 @@ BOOL StackWalker::LoadModules()
 static StackWalker::PReadProcessMemoryRoutine s_readMemoryFunction = NULL;
 static LPVOID                                 s_readMemoryFunction_UserData = NULL;
 
-BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
-                                const CONTEXT*            context,
-                                PReadProcessMemoryRoutine readMemoryFunction,
-                                LPVOID                    pUserData)
+static std::mutex monitorRequestMutex;
+static std::condition_variable monitorRequestCond;
+
+static std::thread* monitorThreadPtr = nullptr;
+static DWORD monitorThreadId = -1;
+static std::atomic<bool> monitorThreadStarted = false;
+
+static std::atomic<bool> requestToStopMonitorThread = false;
+static std::atomic<bool> threadSuspended = false;
+static std::atomic<HANDLE> threadToSuspend = nullptr;
+static std::atomic<bool> foundPotentialDeadlock = false;
+
+void monitorFunc()
+{
+  monitorThreadId = GetCurrentThreadId();
+  SetThreadDescription(GetCurrentThread(), L"MonitorThread");
+
+  // Inform startMonitorThread that thread was started
+  {
+    std::unique_lock lock(monitorRequestMutex);
+    monitorThreadStarted = true;
+    monitorRequestCond.notify_one();
+  }
+
+  do
+  {
+    // Wait for next monitor request or request to stop
+    {
+      std::unique_lock lock(monitorRequestMutex);
+      monitorRequestCond.wait(lock, [] {
+        return threadToSuspend != nullptr || requestToStopMonitorThread;
+        });
+    }
+    if (requestToStopMonitorThread)
+    {
+      break;
+    }
+    assert(threadToSuspend != nullptr);
+
+    const DWORD threadId = GetThreadId(threadToSuspend);
+
+    // Suspend thread
+    DWORD previousSuspendCtr = SuspendThread(threadToSuspend);
+    if (previousSuspendCtr != 0)
+    {
+      if (previousSuspendCtr == ((DWORD) -1))
+      {
+        // Thread has been terminated
+        std::unique_lock lock(monitorRequestMutex);
+        threadToSuspend = nullptr;
+        monitorRequestCond.notify_one();
+
+        // Ignore request and wait for next one
+        continue;
+      }
+
+      std::cerr << "Error trying to suspend thread " << threadId << " : previous suspend ctr should have been 0 but was " << previousSuspendCtr << std::endl;
+      const DWORD currentThreadId = GetThreadId(threadToSuspend);
+      if (currentThreadId != threadId)
+      {
+        std::cerr << "Thread ID has changed to " << currentThreadId << std::endl;
+      }
+    }
+
+    // Monitoring starts, inform stack trace creation thread
+    {
+      std::unique_lock lock(monitorRequestMutex);
+      threadSuspended = true;
+      monitorRequestCond.notify_one();
+    }
+
+    // Wait for at most 100 microseconds
+    const int maxNumWaits = 100;
+    {
+      std::unique_lock lock(monitorRequestMutex);
+      if (!monitorRequestCond.wait_for(lock, std::chrono::microseconds(maxNumWaits), [] {
+        // stop waiting when the stack trace creation thread has completed and
+        // has cleared the 'threadSuspended' flag
+        return !threadSuspended;
+        }))
+      {
+        foundPotentialDeadlock = true;
+      }
+    }
+
+    assert(threadToSuspend != nullptr);
+
+    // Resume thread again
+    previousSuspendCtr = ResumeThread(threadToSuspend);
+    if (previousSuspendCtr != 1)
+    {
+      std::cerr << "Error trying to resume thread " << threadId << " : previous suspend ctr should have been 1 but was " << previousSuspendCtr << std::endl;
+      const DWORD currentThreadId = GetThreadId(threadToSuspend);
+      if (currentThreadId != threadId)
+      {
+        std::cerr << "Thread ID has changed to " << currentThreadId << std::endl;
+      }
+    }
+
+    if (foundPotentialDeadlock)
+    {
+      // Show warning message _after_ resuming thread
+      // We decided not to show a warning as it might confuse users since it can happen quite often
+      //std::cout << "Resumed thread " << threadId << " to clear up potential deadlock situation!" << std::endl;
+    }
+
+    // Monitoring finished, inform stack trace creation thread
+    {
+      std::unique_lock lock(monitorRequestMutex);
+      threadToSuspend = nullptr;
+      threadSuspended = false;
+      monitorRequestCond.notify_one();
+    }
+  }
+  while (true);
+}
+
+BOOL StackWalker::ShowCallstack(HANDLE hThread, const CONTEXT* context, PReadProcessMemoryRoutine readMemoryFunction, LPVOID pUserData)
 {
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
-  IMAGEHLP_SYMBOL64*                        pSym = NULL;
   StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
   IMAGEHLP_LINE64                           Line;
   int                                       frameNum;
-  bool                                      bLastEntryCalled = true;
   int                                       curRecursionCount = 0;
 
   if (m_modulesLoaded == FALSE)
@@ -1123,91 +1237,217 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   s_readMemoryFunction = readMemoryFunction;
   s_readMemoryFunction_UserData = pUserData;
 
-  if (context == NULL)
+  const int maxNumFrames = 100;
+  DWORD64 offsets[maxNumFrames];
+
+  const int maxNumAttempts = 5;
+  int attempt = 1;
+  bool swFailed = false;
+  bool endlessCallstack = false;
+  STACKFRAME64 s; // in/out stackframe
+
+  do
   {
-    // If no context is provided, capture the context
-    // See: https://stackwalker.codeplex.com/discussions/446958
+    if (context == NULL)
+    {
+      foundPotentialDeadlock = false;
+
+      // If no context is provided, capture the context
+      // See: https://stackwalker.codeplex.com/discussions/446958
 #if _WIN32_WINNT <= 0x0501
     // If we need to support XP, we need to use the "old way", because "GetThreadId" is not available!
-    if (hThread == GetCurrentThread())
+      if (hThread == GetCurrentThread())
 #else
-    if (GetThreadId(hThread) == GetCurrentThreadId())
+      if (GetThreadId(hThread) == GetCurrentThreadId())
 #endif
-    {
-      if (m_sw->m_ctx.ContextFlags != 0)
-        c = m_sw->m_ctx;   // context taken at Init
-      else
-        GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, USED_CONTEXT_FLAGS);
-    }
-    else
-    {
-      SuspendThread(hThread);
-      memset(&c, 0, sizeof(CONTEXT));
-      c.ContextFlags = USED_CONTEXT_FLAGS;
-
-      // TODO: Detect if you want to get a thread context of a different process, which is running a different processor architecture...
-      // This does only work if we are x64 and the target process is x64 or x86;
-      // It cannot work, if this process is x64 and the target process is x64... this is not supported...
-      // See also: http://www.howzatt.demon.co.uk/articles/DebuggingInWin64.html
-      if (GetThreadContext(hThread, &c) == FALSE)
       {
-        ResumeThread(hThread);
-        return FALSE;
+        if (m_sw->m_ctx.ContextFlags != 0)
+          c = m_sw->m_ctx;   // context taken at Init
+        else
+          GET_CURRENT_CONTEXT_STACKWALKER_CODEPLEX(c, USED_CONTEXT_FLAGS);
+      }
+      else
+      {
+        const bool isMonitorThread = GetThreadId(hThread) == monitorThreadId;
+
+        if (monitorThreadPtr == nullptr)
+        {
+          // Need to start monitoring thread first
+          std::cout << "Monitoring thread not yet running, starting it on the fly ..." << std::endl;
+          startMonitoringThread();
+        }
+
+        if (!isMonitorThread)
+        {
+          // Inform MonitorThread about new thread to suspend/resume
+          std::unique_lock lock(monitorRequestMutex);
+          threadToSuspend = hThread;
+          threadSuspended = false;
+          monitorRequestCond.notify_one();
+
+          // Wait for MonitorThread to pickup next thread and to succeed suspending it
+          monitorRequestCond.wait(lock, [] {
+            // Stop waiting when monitoring has started
+            // or when this thread did not get enough CPU cycles and the MonitorThread already finished
+            const bool ts = threadToSuspend == nullptr;
+            return threadSuspended == true || threadToSuspend == nullptr;
+            });
+          if (threadToSuspend == nullptr)
+          {
+            // Shit happens, the MonitorThread was faster
+            if (attempt++ < maxNumAttempts)
+            {
+              // Try again
+              //std::cout << "Trying again after stack trace thread did not get enough CPU cycles before monitoring thread finished, attempt = " << attempt << std::endl;
+              foundPotentialDeadlock = true;
+              continue;
+            }
+            else
+            {
+              // Give up
+              //std::cout << "Stack trace thread did not get enough CPU cycles before monitoring thread finished. No more attempts, giving up." << std::endl;
+              return false;
+            }
+          }
+        }
+
+        memset(&c, 0, sizeof(CONTEXT));
+        c.ContextFlags = USED_CONTEXT_FLAGS;
+
+        // TODO: Detect if you want to get a thread context of a different process, which is running a different processor architecture...
+        // This does only work if we are x64 and the target process is x64 or x86;
+        // It cannot work, if this process is x64 and the target process is x64... this is not supported...
+        // See also: http://www.howzatt.demon.co.uk/articles/DebuggingInWin64.html
+        if (GetThreadContext(hThread, &c) == FALSE)
+        {
+          if (threadToSuspend != nullptr)
+          {
+            // Wait for MonitorThread to resume thread
+            std::unique_lock lock(monitorRequestMutex);
+            monitorRequestCond.wait(lock, [] {
+              return threadToSuspend == nullptr;
+              });
+          }
+          return FALSE;
+        }
       }
     }
-  }
-  else
-    c = *context;
+    else
+      c = *context;
 
-  // init STACKFRAME for first call
-  STACKFRAME64 s; // in/out stackframe
-  memset(&s, 0, sizeof(s));
-  DWORD imageType;
+    // init STACKFRAME for first call
+    memset(&s, 0, sizeof(s));
+    DWORD imageType;
 #ifdef _M_IX86
-  // normally, call ImageNtHeader() and use machine info from PE header
-  imageType = IMAGE_FILE_MACHINE_I386;
-  s.AddrPC.Offset = c.Eip;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Ebp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Esp;
-  s.AddrStack.Mode = AddrModeFlat;
+    // normally, call ImageNtHeader() and use machine info from PE header
+    imageType = IMAGE_FILE_MACHINE_I386;
+    s.AddrPC.Offset = c.Eip;
+    s.AddrPC.Mode = AddrModeFlat;
+    s.AddrFrame.Offset = c.Ebp;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrStack.Offset = c.Esp;
+    s.AddrStack.Mode = AddrModeFlat;
 #elif _M_X64
-  imageType = IMAGE_FILE_MACHINE_AMD64;
-  s.AddrPC.Offset = c.Rip;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Rsp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Rsp;
-  s.AddrStack.Mode = AddrModeFlat;
+    imageType = IMAGE_FILE_MACHINE_AMD64;
+    s.AddrPC.Offset = c.Rip;
+    s.AddrPC.Mode = AddrModeFlat;
+    s.AddrFrame.Offset = c.Rsp;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrStack.Offset = c.Rsp;
+    s.AddrStack.Mode = AddrModeFlat;
 #elif _M_IA64
-  imageType = IMAGE_FILE_MACHINE_IA64;
-  s.AddrPC.Offset = c.StIIP;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.IntSp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrBStore.Offset = c.RsBSP;
-  s.AddrBStore.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.IntSp;
-  s.AddrStack.Mode = AddrModeFlat;
+    imageType = IMAGE_FILE_MACHINE_IA64;
+    s.AddrPC.Offset = c.StIIP;
+    s.AddrPC.Mode = AddrModeFlat;
+    s.AddrFrame.Offset = c.IntSp;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrBStore.Offset = c.RsBSP;
+    s.AddrBStore.Mode = AddrModeFlat;
+    s.AddrStack.Offset = c.IntSp;
+    s.AddrStack.Mode = AddrModeFlat;
 #elif _M_ARM64
-  imageType = IMAGE_FILE_MACHINE_ARM64;
-  s.AddrPC.Offset = c.Pc;
-  s.AddrPC.Mode = AddrModeFlat;
-  s.AddrFrame.Offset = c.Fp;
-  s.AddrFrame.Mode = AddrModeFlat;
-  s.AddrStack.Offset = c.Sp;
-  s.AddrStack.Mode = AddrModeFlat;
+    imageType = IMAGE_FILE_MACHINE_ARM64;
+    s.AddrPC.Offset = c.Pc;
+    s.AddrPC.Mode = AddrModeFlat;
+    s.AddrFrame.Offset = c.Fp;
+    s.AddrFrame.Mode = AddrModeFlat;
+    s.AddrStack.Offset = c.Sp;
+    s.AddrStack.Mode = AddrModeFlat;
 #else
 #error "Platform not supported!"
 #endif
 
-  pSym = (IMAGEHLP_SYMBOL64*)malloc(sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  if (!pSym)
-    goto cleanup; // not enough memory...
-  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
-  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
+    for (frameNum = 0; frameNum < maxNumFrames && !foundPotentialDeadlock; ++frameNum)
+    {
+      // get next stack frame (StackWalk64(), SymFunctionTableAccess64(), SymGetModuleBase64())
+      // if this returns ERROR_INVALID_ADDRESS (487) or ERROR_NOACCESS (998), you can
+      // assume that either you are done, or that the stack is so hosed that the next
+      // deeper frame could not be found.
+      // CONTEXT need not to be supplied if imageTyp is IMAGE_FILE_MACHINE_I386!
+      if (!this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem,
+        this->m_sw->pSFTA, this->m_sw->pSGMB, NULL))
+      {
+        // INFO: "StackWalk64" does not set "GetLastError"...
+        swFailed = true;
+        break;
+      }
+
+      offsets[frameNum] = s.AddrPC.Offset;
+      if (s.AddrPC.Offset == s.AddrReturn.Offset)
+      {
+        if ((this->m_MaxRecursionCount > 0) && (curRecursionCount > m_MaxRecursionCount))
+        {
+          endlessCallstack = true;
+          break;
+        }
+        curRecursionCount++;
+      }
+      else
+        curRecursionCount = 0;
+
+      if (s.AddrReturn.Offset == 0)
+      {
+        break;
+      }
+    }
+
+    if (context == NULL)
+    {
+      if (threadToSuspend != nullptr)
+      {
+        // Inform MonitorThread that everything is fine
+        // by clearing the 'threadSuspended' flag
+        {
+          std::unique_lock lock(monitorRequestMutex);
+          threadSuspended = false;
+          monitorRequestCond.notify_one();
+        }
+
+        // Wait for MonitorThread to resume thread
+        std::unique_lock lock(monitorRequestMutex);
+        monitorRequestCond.wait(lock, [] {
+          return threadToSuspend == nullptr;
+          });
+      }
+    }
+  }
+  while (!swFailed && !endlessCallstack && foundPotentialDeadlock && attempt++ < maxNumAttempts);
+
+  if (swFailed)
+  {
+    this->OnDbgHelpErr("StackWalk64", 0, s.AddrPC.Offset);
+    return false;
+  }
+  else if (endlessCallstack)
+  {
+    this->OnDbgHelpErr("StackWalk64-Endless-Callstack!", 0, s.AddrPC.Offset);
+    return false;
+  }
+  else if (foundPotentialDeadlock)
+  {
+    this->OnDbgHelpErr("StackWalk64 unresolvable deadlock", 0, 0);
+    return false;
+  }
 
   memset(&Line, 0, sizeof(Line));
   Line.SizeOfStruct = sizeof(Line);
@@ -1215,22 +1455,18 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   memset(&Module, 0, sizeof(Module));
   Module.SizeOfStruct = sizeof(Module);
 
-  for (frameNum = 0;; ++frameNum)
-  {
-    // get next stack frame (StackWalk64(), SymFunctionTableAccess64(), SymGetModuleBase64())
-    // if this returns ERROR_INVALID_ADDRESS (487) or ERROR_NOACCESS (998), you can
-    // assume that either you are done, or that the stack is so hosed that the next
-    // deeper frame could not be found.
-    // CONTEXT need not to be supplied if imageTyp is IMAGE_FILE_MACHINE_I386!
-    if (!this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem,
-                         this->m_sw->pSFTA, this->m_sw->pSGMB, NULL))
-    {
-      // INFO: "StackWalk64" does not set "GetLastError"...
-      this->OnDbgHelpErr("StackWalk64", 0, s.AddrPC.Offset);
-      break;
-    }
+  const size_t bufferSize = sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN;
+  char buffer[bufferSize];
+  IMAGEHLP_SYMBOL64* pSym = (IMAGEHLP_SYMBOL64*)&buffer;
+  memset(pSym, 0, sizeof(IMAGEHLP_SYMBOL64) + STACKWALK_MAX_NAMELEN);
+  pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
+  pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
-    csEntry.offset = s.AddrPC.Offset;
+  int numFramesFound = frameNum;
+  for (frameNum = 0; frameNum < numFramesFound; ++frameNum)
+  {
+    DWORD64 offset = offsets[frameNum];
+    csEntry.offset = offset;
     csEntry.name[0] = 0;
     csEntry.undName[0] = 0;
     csEntry.undFullName[0] = 0;
@@ -1240,23 +1476,12 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     csEntry.lineNumber = 0;
     csEntry.loadedImageName[0] = 0;
     csEntry.moduleName[0] = 0;
-    if (s.AddrPC.Offset == s.AddrReturn.Offset)
-    {
-      if ((this->m_MaxRecursionCount > 0) && (curRecursionCount > m_MaxRecursionCount))
-      {
-        this->OnDbgHelpErr("StackWalk64-Endless-Callstack!", 0, s.AddrPC.Offset);
-        break;
-      }
-      curRecursionCount++;
-    }
-    else
-      curRecursionCount = 0;
-    if (s.AddrPC.Offset != 0)
+    if (offset != 0)
     {
       // we seem to have a valid PC
       // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol),
-                             pSym) != FALSE)
+      if (this->m_sw->pSGSFA(this->m_hProcess, offset, &(csEntry.offsetFromSmybol),
+        pSym) != FALSE)
       {
         MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
         // UnDecorateSymbolName()
@@ -1265,62 +1490,62 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       }
       else
       {
-        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), s.AddrPC.Offset);
+        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), offset);
       }
 
       // show line number info, NT5.0-method (SymGetLineFromAddr64())
       if (this->m_sw->pSGLFA != NULL)
       { // yes, we have SymGetLineFromAddr64()
-        if (this->m_sw->pSGLFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromLine),
-                               &Line) != FALSE)
+        if (this->m_sw->pSGLFA(this->m_hProcess, offset, &(csEntry.offsetFromLine),
+          &Line) != FALSE)
         {
           csEntry.lineNumber = Line.LineNumber;
           MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, Line.FileName);
         }
         else
         {
-          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), s.AddrPC.Offset);
+          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), offset);
         }
       } // yes, we have SymGetLineFromAddr64()
 
       // show module info (SymGetModuleInfo64())
-      if (this->m_sw->GetModuleInfo(this->m_hProcess, s.AddrPC.Offset, &Module) != FALSE)
+      if (this->m_sw->GetModuleInfo(this->m_hProcess, offset, &Module) != FALSE)
       { // got module info OK
         switch (Module.SymType)
         {
-          case SymNone:
-            csEntry.symTypeString = "-nosymbols-";
-            break;
-          case SymCoff:
-            csEntry.symTypeString = "COFF";
-            break;
-          case SymCv:
-            csEntry.symTypeString = "CV";
-            break;
-          case SymPdb:
-            csEntry.symTypeString = "PDB";
-            break;
-          case SymExport:
-            csEntry.symTypeString = "-exported-";
-            break;
-          case SymDeferred:
-            csEntry.symTypeString = "-deferred-";
-            break;
-          case SymSym:
-            csEntry.symTypeString = "SYM";
-            break;
+        case SymNone:
+          csEntry.symTypeString = "-nosymbols-";
+          break;
+        case SymCoff:
+          csEntry.symTypeString = "COFF";
+          break;
+        case SymCv:
+          csEntry.symTypeString = "CV";
+          break;
+        case SymPdb:
+          csEntry.symTypeString = "PDB";
+          break;
+        case SymExport:
+          csEntry.symTypeString = "-exported-";
+          break;
+        case SymDeferred:
+          csEntry.symTypeString = "-deferred-";
+          break;
+        case SymSym:
+          csEntry.symTypeString = "SYM";
+          break;
 #if API_VERSION_NUMBER >= 9
-          case SymDia:
-            csEntry.symTypeString = "DIA";
-            break;
+        case SymDia:
+          csEntry.symTypeString = "DIA";
+          break;
 #endif
-          case 8: //SymVirtual:
-            csEntry.symTypeString = "Virtual";
-            break;
-          default:
-            //_snprintf( ty, sizeof(ty), "symtype=%ld", (long) Module.SymType );
-            csEntry.symTypeString = NULL;
-            break;
+        case 8: //SymVirtual:
+          csEntry.symTypeString = "Virtual";
+          break;
+        default:
+          //_snprintf( ty, sizeof(ty), "symtype=%ld", (long) Module.SymType );
+          csEntry.symTypeString = NULL;
+          break;
         }
 
         MyStrCpy(csEntry.moduleName, STACKWALK_MAX_NAMELEN, Module.ModuleName);
@@ -1329,34 +1554,22 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       } // got module info OK
       else
       {
-        this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), s.AddrPC.Offset);
+        this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), offset);
       }
     } // we seem to have a valid PC
 
     CallstackEntryType et = nextEntry;
     if (frameNum == 0)
       et = firstEntry;
-    bLastEntryCalled = false;
     this->OnCallstackEntry(et, csEntry);
-
-    if (s.AddrReturn.Offset == 0)
+    if (frameNum == numFramesFound - 1)
     {
-      bLastEntryCalled = true;
+      // attention: for the last entry OnCallstackEntry gets called twice!
+	  //            it might be better to only call it once with type 'lastEntry'
+	  //            but this would be a breaking change for most clients ...
       this->OnCallstackEntry(lastEntry, csEntry);
-      SetLastError(ERROR_SUCCESS);
-      break;
     }
   } // for ( frameNum )
-
-cleanup:
-  if (pSym)
-    free(pSym);
-
-  if (bLastEntryCalled == false)
-    this->OnCallstackEntry(lastEntry, csEntry);
-
-  if (context == NULL)
-    ResumeThread(hThread);
 
   return TRUE;
 }
@@ -1545,4 +1758,46 @@ void StackWalker::OnSymInit(LPCSTR szSearchPath, DWORD symOptions, LPCSTR szUser
 void StackWalker::OnOutput(LPCSTR buffer)
 {
   OutputDebugStringA(buffer);
+}
+
+void StackWalker::startMonitoringThread()
+{
+  if (monitorThreadPtr != nullptr)
+  {
+    std::cerr << "Monitoring thread is already running!" << std::endl;
+  }
+  else
+  {
+    // Wait for startup of thread ...
+    std::unique_lock lock(monitorRequestMutex);
+    monitorThreadStarted = false;
+    threadSuspended = false;
+    threadToSuspend = nullptr;
+    monitorThreadPtr = new std::thread(monitorFunc);
+    monitorRequestCond.wait(lock, [] {
+      return monitorThreadStarted == true;
+      });
+  }
+}
+
+void StackWalker::stopMonitoringThread()
+{
+  if (monitorThreadPtr != nullptr)
+  {
+    // Inform MonitorThread to terminate
+    {
+      std::unique_lock lock(monitorRequestMutex);
+      requestToStopMonitorThread = true;
+      monitorRequestCond.notify_one();
+    }
+
+    monitorThreadPtr->join();
+    delete monitorThreadPtr;
+    monitorThreadPtr = nullptr;
+    requestToStopMonitorThread = false;
+  }
+  else
+  {
+    std::cerr << "Monitoring thread is not running!" << std::endl;
+  }
 }
