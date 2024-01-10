@@ -42,6 +42,7 @@
 #pragma once
 
 #include <windows.h>
+#include <thread>
 
 // special defines for VC5/6 (if no actual PSDK is installed):
 #if _MSC_VER < 1300
@@ -130,6 +131,9 @@ public:
   );
 
   BOOL LoadModules();
+
+  void startMonitoringThread();
+  void stopMonitoringThread();
 
   BOOL ShowCallstack(
       HANDLE                    hThread = GetCurrentThread(),
