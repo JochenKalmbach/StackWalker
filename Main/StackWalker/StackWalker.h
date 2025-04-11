@@ -42,6 +42,7 @@
 #pragma once
 
 #include <windows.h>
+#include <DbgHelp.h>
 
 // special defines for VC5/6 (if no actual PSDK is installed):
 #if _MSC_VER < 1300
@@ -129,14 +130,28 @@ public:
       LPVOID  pUserData // optional data, which was passed in "ShowCallstack"
   );
 
+  typedef PVOID(__stdcall* PFunctionTableAccessRoutine)(
+      HANDLE hProcess,
+      DWORD64 AddrBase,
+      LPVOID  pUserData // optional data, which was passed in "ShowCallstack"
+  );
+
+  typedef DWORD64(__stdcall* PGetModuleBase)(IN HANDLE hProcess,
+          IN DWORD64 dwAddr,
+                                             LPVOID  pUserData);
+
   BOOL LoadModules();
 
   BOOL ShowCallstack(
       HANDLE                    hThread = GetCurrentThread(),
       const CONTEXT*            context = NULL,
       PReadProcessMemoryRoutine readMemoryFunction = NULL,
-      LPVOID pUserData = NULL // optional to identify some data in the 'readMemoryFunction'-callback
-  );
+      LPVOID pReadMemoryFunction_userData = NULL, // optional to identify some data in the 'readMemoryFunction'-callback
+      PFunctionTableAccessRoutine functionTableAccessFunction = NULL,
+      LPVOID pFunctionTableAccessFunction_UserData = NULL,  // optional to identify some data in the 'readMemoryFunction'-callback
+      PGetModuleBase getModuleBaseFunction = NULL,
+      LPVOID pGetModuleBaseFunction_UserData = NULL
+              );
 
   BOOL ShowObject(LPVOID pObject);
 
@@ -203,6 +218,11 @@ protected:
                                       PVOID   lpBuffer,
                                       DWORD   nSize,
                                       LPDWORD lpNumberOfBytesRead);
+
+  static PVOID __stdcall myFunctionTableAccessFunction(HANDLE hProcess,
+                                                       DWORD64 AddrBase);
+
+  static DWORD64 __stdcall myGetModuleBaseFunction(HANDLE hProcess, DWORD64 dwAddr);
 
   friend StackWalkerInternal;
 }; // class StackWalker

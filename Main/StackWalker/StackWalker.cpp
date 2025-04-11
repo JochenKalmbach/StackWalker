@@ -91,6 +91,7 @@
 #include <new>
 
 #pragma comment(lib, "version.lib") // for "VerQueryValue"
+#pragma comment(lib, "dbghelp.lib")
 
 #pragma warning(disable : 4826)
 #if _MSC_VER >= 1900
@@ -261,7 +262,6 @@ public:
     m_hDbhHelp = NULL;
     pSC = NULL;
     m_hProcess = hProcess;
-    pSFTA = NULL;
     pSGLFA = NULL;
     pSGMB = NULL;
     pSGMI = NULL;
@@ -368,7 +368,6 @@ public:
     pSGO = (tSGO)GetProcAddress(m_hDbhHelp, "SymGetOptions");
     pSSO = (tSSO)GetProcAddress(m_hDbhHelp, "SymSetOptions");
 
-    pSFTA = (tSFTA)GetProcAddress(m_hDbhHelp, "SymFunctionTableAccess64");
     pSGLFA = (tSGLFA)GetProcAddress(m_hDbhHelp, "SymGetLineFromAddr64");
     pSGMB = (tSGMB)GetProcAddress(m_hDbhHelp, "SymGetModuleBase64");
     pSGMI = (tSGMI)GetProcAddress(m_hDbhHelp, "SymGetModuleInfo64");
@@ -377,7 +376,7 @@ public:
     pSLM = (tSLM)GetProcAddress(m_hDbhHelp, "SymLoadModule64");
     pSGSP = (tSGSP)GetProcAddress(m_hDbhHelp, "SymGetSearchPath");
 
-    if (pSC == NULL || pSFTA == NULL || pSGMB == NULL || pSGMI == NULL || pSGO == NULL ||
+    if (pSC == NULL || pSGMB == NULL || pSGMI == NULL || pSGO == NULL ||
         pSGSFA == NULL || pSI == NULL || pSSO == NULL || pSW == NULL || pUDSN == NULL ||
         pSLM == NULL)
     {
@@ -466,10 +465,6 @@ public:
   // SymCleanup()
   typedef BOOL(__stdcall* tSC)(IN HANDLE hProcess);
   tSC pSC;
-
-  // SymFunctionTableAccess64()
-  typedef PVOID(__stdcall* tSFTA)(HANDLE hProcess, DWORD64 AddrBase);
-  tSFTA pSFTA;
 
   // SymGetLineFromAddr64()
   typedef BOOL(__stdcall* tSGLFA)(IN HANDLE hProcess,
@@ -886,7 +881,7 @@ extern "C" void** __cdecl __current_exception_context();
 static PCONTEXT get_current_exception_context()
 {
   PCONTEXT * pctx = NULL;
-#if defined(_MSC_VER) && _MSC_VER >= 1400 && _MSC_VER < 1900  
+#if defined(_MSC_VER) && _MSC_VER >= 1400 && _MSC_VER < 1900
   LPSTR ptd = (LPSTR)_getptd();
   if (ptd)
     pctx = (PCONTEXT *)(ptd + (sizeof(void*) == 4 ? 0x8C : 0xF8));
@@ -1097,10 +1092,22 @@ BOOL StackWalker::LoadModules()
 static StackWalker::PReadProcessMemoryRoutine s_readMemoryFunction = NULL;
 static LPVOID                                 s_readMemoryFunction_UserData = NULL;
 
+// Similar to the readMemoryFunction one may want to provide its own function table access function
+static StackWalker::PFunctionTableAccessRoutine s_functionTableAccessFunction = NULL;
+static LPVOID s_functionTableAccessFunction_UserData = NULL;
+
+// Similar to the readMemoryFunction one may want to provide its own function table access function
+static StackWalker::PGetModuleBase s_getModuleBaseFunction = NULL;
+static LPVOID s_getModuleBaseFunction_UserData = NULL;
+
 BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
                                 const CONTEXT*            context,
                                 PReadProcessMemoryRoutine readMemoryFunction,
-                                LPVOID                    pUserData)
+                                LPVOID                    pReadMemoryFunction_userData,
+                                PFunctionTableAccessRoutine functionTableAccessFunction,
+                                LPVOID pFunctionTableAccessFunction_UserData,
+                                PGetModuleBase getModuleBaseFunction,
+                                LPVOID pGetModuleBaseFunction_UserData)
 {
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
@@ -1121,7 +1128,11 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   }
 
   s_readMemoryFunction = readMemoryFunction;
-  s_readMemoryFunction_UserData = pUserData;
+  s_readMemoryFunction_UserData = pReadMemoryFunction_userData;
+  s_functionTableAccessFunction = functionTableAccessFunction;
+  s_functionTableAccessFunction_UserData = pFunctionTableAccessFunction_UserData;
+    s_getModuleBaseFunction = getModuleBaseFunction;
+    s_getModuleBaseFunction_UserData = pGetModuleBaseFunction_UserData;
 
   if (context == NULL)
   {
@@ -1223,7 +1234,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     // deeper frame could not be found.
     // CONTEXT need not to be supplied if imageTyp is IMAGE_FILE_MACHINE_I386!
     if (!this->m_sw->pSW(imageType, this->m_hProcess, hThread, &s, &c, myReadProcMem,
-                         this->m_sw->pSFTA, this->m_sw->pSGMB, NULL))
+                         myFunctionTableAccessFunction, myGetModuleBaseFunction, NULL))
     {
       // INFO: "StackWalk64" does not set "GetLastError"...
       this->OnDbgHelpErr("StackWalk64", 0, s.AddrPC.Offset);
@@ -1399,6 +1410,23 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   free(pSym);
   return TRUE;
 };
+
+PVOID __stdcall StackWalker::myFunctionTableAccessFunction(HANDLE hProcess,
+                                                           DWORD64 AddrBase){
+  if(s_functionTableAccessFunction == NULL){
+    return SymFunctionTableAccess64(hProcess, AddrBase);
+  } else {
+    return s_functionTableAccessFunction(hProcess, AddrBase, s_functionTableAccessFunction_UserData);
+  }
+}
+
+DWORD64 __stdcall StackWalker::myGetModuleBaseFunction(HANDLE hProcess, DWORD64 dwAddr){
+    if(s_getModuleBaseFunction == NULL){
+        return SymGetModuleBase64(hProcess, dwAddr);
+    } else {
+        return s_getModuleBaseFunction(hProcess, dwAddr, s_getModuleBaseFunction_UserData);
+    }
+}
 
 BOOL __stdcall StackWalker::myReadProcMem(HANDLE  hProcess,
                                           DWORD64 qwBaseAddress,

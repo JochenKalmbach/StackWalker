@@ -28,6 +28,7 @@ The goal for this project was the following:
 * Support of x86, x64 and IA64 architecture
 * Default output to debugger-output window (but can be customized)
 * Support of user-provided read-memory-function
+* Support of user-provided read-function-table
 * Support of the widest range of development-IDEs (VC5-VC8)
 * Most portable solution to walk the callstack
 
@@ -157,7 +158,8 @@ class StackWalker
 {
 public:
     BOOL ShowCallstack(HANDLE hThread = GetCurrentThread(), CONTEXT *context = NULL,
-                       PReadProcessMemoryRoutine readMemoryFunction = NULL, LPVOID pUserData = NULL);
+                       PReadProcessMemoryRoutine readMemoryFunction = NULL, LPVOID pReadMemoryFunction_userData = NULL,
+                       PFunctionTableAccessRoutine functionTableAccessFunction = NULL, LPVOID pfunctionTableAccessFunction_UserData = NULL);
 };
 ```
 
