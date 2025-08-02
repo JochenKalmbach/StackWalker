@@ -399,6 +399,7 @@ public:
     symOptions = this->pSSO(symOptions);
 
     char buf[StackWalker::STACKWALK_MAX_NAMELEN] = {0};
+    // SymGetSearchPath()
     if (this->pSGSP != NULL)
     {
       if (this->pSGSP(m_hProcess, buf, StackWalker::STACKWALK_MAX_NAMELEN) == FALSE)
@@ -535,6 +536,7 @@ public:
                                          DWORD Flags);
   tUDSN pUDSN;
 
+  // SymGetSearchPath()
   typedef BOOL(__stdcall WINAPI* tSGSP)(HANDLE hProcess, PSTR SearchPath, DWORD SearchPathLength);
   tSGSP pSGSP;
 
