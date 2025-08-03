@@ -1242,6 +1242,11 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     csEntry.lineNumber = 0;
     csEntry.loadedImageName[0] = 0;
     csEntry.moduleName[0] = 0;
+
+    // make sure the location of the calling function is reported, and not of the next statement
+    if (frameNum != 0 && csEntry.offset != 0)
+      csEntry.offset--;
+
     if (s.AddrPC.Offset == s.AddrReturn.Offset)
     {
       if ((this->m_MaxRecursionCount > 0) && (curRecursionCount > m_MaxRecursionCount))
@@ -1253,11 +1258,11 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     }
     else
       curRecursionCount = 0;
-    if (s.AddrPC.Offset != 0)
+    if (csEntry.offset != 0)
     {
       // we seem to have a valid PC
       // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSymbol),
+      if (this->m_sw->pSGSFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromSymbol),
                              pSym) != FALSE)
       {
         MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
@@ -1267,13 +1272,13 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       }
       else
       {
-        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), s.AddrPC.Offset);
+        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), csEntry.offset);
       }
 
       // show line number info, NT5.0-method (SymGetLineFromAddr64())
       if (this->m_sw->pSGLFA != NULL)
       { // yes, we have SymGetLineFromAddr64()
-        if (this->m_sw->pSGLFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromLine),
+        if (this->m_sw->pSGLFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromLine),
                                &Line) != FALSE)
         {
           csEntry.lineNumber = Line.LineNumber;
@@ -1281,12 +1286,12 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
         }
         else
         {
-          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), s.AddrPC.Offset);
+          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), csEntry.offset);
         }
       } // yes, we have SymGetLineFromAddr64()
 
       // show module info (SymGetModuleInfo64())
-      if (this->m_sw->GetModuleInfo(this->m_hProcess, s.AddrPC.Offset, &Module) != FALSE)
+      if (this->m_sw->GetModuleInfo(this->m_hProcess, csEntry.offset, &Module) != FALSE)
       { // got module info OK
         switch (Module.SymType)
         {
@@ -1331,7 +1336,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       } // got module info OK
       else
       {
-        this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), s.AddrPC.Offset);
+        this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), csEntry.offset);
       }
     } // we seem to have a valid PC
 
