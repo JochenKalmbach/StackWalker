@@ -48,9 +48,9 @@ mkdir build-dir
 cd build-dir
 
 # batch
-cmake -G "Visual Studio 15 2017 Win64" --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX=%cd%/root ..
+cmake -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=%cd%/root ..
 # powershell
-cmake -G "Visual Studio 15 2017 Win64" --config RelWithDebInfo -DCMAKE_INSTALL_PREFIX="$($(get-location).Path)/root" ..
+cmake -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX="$($(get-location).Path)/root" ..
 
 cmake --build . --config RelWithDebInfo
 ctest.exe -V -C RelWithDebInfo
@@ -358,11 +358,14 @@ typedef enum StackWalkOptions
     // Also use the public Microsoft-Symbol-Server
     SymUseSymSrv = 0x20,
 
+    // Retrieve inline stack frames
+    SymGetInlineFrames = 0x40,
+
     // Contains all the above "Sym"-options
-    SymAll = 0x30,
+    SymAll = 0x70,
 
     // Contains all options (default)
-    OptionsAll = 0x3F
+    OptionsAll = 0x7F
 } StackWalkOptions;
 ```
 
