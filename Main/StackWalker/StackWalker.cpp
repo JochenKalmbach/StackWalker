@@ -377,6 +377,21 @@ public:
     pSLM = (tSLM)GetProcAddress(m_hDbhHelp, "SymLoadModule64");
     pSGSP = (tSGSP)GetProcAddress(m_hDbhHelp, "SymGetSearchPath");
 
+    if ((this->m_parent->m_options & StackWalker::SymGetInlineFrames) != 0)
+    {
+      pSAIIT = (tSAIIT)GetProcAddress(m_hDbhHelp, "SymAddrIncludeInlineTrace");
+      pSQIT = (tSQIT)GetProcAddress(m_hDbhHelp, "SymQueryInlineTrace");
+      pSFIC = (tSFIC)GetProcAddress(m_hDbhHelp, "SymFromInlineContext");
+      pSGLFIC = (tSGLFIC)GetProcAddress(m_hDbhHelp, "SymGetLineFromInlineContext");
+      if (pSAIIT == NULL || pSQIT == NULL || pSFIC == NULL || pSGLFIC == NULL)
+      {
+        pSAIIT = NULL;
+        pSQIT = NULL;
+        pSFIC = NULL;
+        pSGLFIC = NULL;
+      }
+    }
+
     if (pSC == NULL || pSFTA == NULL || pSGMB == NULL || pSGMI == NULL || pSGO == NULL ||
         pSGSFA == NULL || pSI == NULL || pSSO == NULL || pSW == NULL || pUDSN == NULL ||
         pSLM == NULL)
@@ -539,6 +554,38 @@ public:
   // SymGetSearchPath()
   typedef BOOL(__stdcall WINAPI* tSGSP)(HANDLE hProcess, PSTR SearchPath, DWORD SearchPathLength);
   tSGSP pSGSP;
+
+  // SymAddrIncludeInlineTrace()
+  typedef DWORD (__stdcall* tSAIIT)(IN HANDLE  hProcess,
+                                    IN DWORD64 Address);
+  tSAIIT pSAIIT;
+
+  // SymQueryInlineTrace()
+  typedef BOOL (__stdcall* tSQIT)(IN HANDLE hProcess,
+                                  IN DWORD64 StartAddress,
+                                  IN DWORD StartContext,
+                                  IN DWORD64 StartRetAddress,
+                                  IN DWORD64 CurAddress,
+                                  OUT LPDWORD CurContext,
+                                  OUT LPDWORD CurFrameIndex);
+  tSQIT pSQIT;
+
+  // SymFromInlineContext()
+  typedef BOOL (__stdcall* tSFIC)(IN HANDLE hProcess,
+                                  IN DWORD64 Address,
+                                  IN ULONG InlineContext,
+                                  OUT PDWORD64 Displacement,
+                                  IN OUT PSYMBOL_INFO Symbol);
+  tSFIC pSFIC;
+
+  // SymGetLineFromInlineContext()
+  typedef BOOL (__stdcall* tSGLFIC)(IN HANDLE hProcess,
+                                    IN DWORD64 qwAddr,
+                                    IN ULONG InlineContext,
+                                    IN OPTIONAL DWORD64 qwModuleBaseAddress,
+                                    OUT PDWORD pdwDisplacement,
+                                    OUT PIMAGEHLP_LINE64 Line64);
+  tSGLFIC pSGLFIC;
 
 private:
 // **************************************** ToolHelp32 ************************
@@ -1107,11 +1154,13 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   CONTEXT                                   c;
   CallstackEntry                            csEntry;
   IMAGEHLP_SYMBOL64*                        pSym = NULL;
+  PSYMBOL_INFO                              pSymInfo = NULL;
   StackWalkerInternal::IMAGEHLP_MODULE64_V3 Module;
   IMAGEHLP_LINE64                           Line;
   int                                       frameNum;
   bool                                      bLastEntryCalled = true;
   int                                       curRecursionCount = 0;
+  CallstackEntryType                        entryType = firstEntry;
 
   if (m_modulesLoaded == FALSE)
     this->LoadModules(); // ignore the result...
@@ -1211,6 +1260,16 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
   pSym->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
   pSym->MaxNameLength = STACKWALK_MAX_NAMELEN;
 
+  if (this->m_sw->pSAIIT != NULL)
+  {
+    pSymInfo = (SYMBOL_INFO*)malloc(sizeof(SYMBOL_INFO) + STACKWALK_MAX_NAMELEN);
+    if (!pSymInfo)
+      goto cleanup; // not enough memory...
+    memset(pSymInfo, 0, sizeof(SYMBOL_INFO) + STACKWALK_MAX_NAMELEN);
+    pSymInfo->SizeOfStruct = sizeof(SYMBOL_INFO);
+    pSymInfo->MaxNameLen = STACKWALK_MAX_NAMELEN;
+  }
+
   memset(&Line, 0, sizeof(Line));
   Line.SizeOfStruct = sizeof(Line);
 
@@ -1233,15 +1292,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     }
 
     csEntry.offset = s.AddrPC.Offset;
-    csEntry.name[0] = 0;
-    csEntry.undName[0] = 0;
-    csEntry.undFullName[0] = 0;
-    csEntry.offsetFromSymbol = 0;
-    csEntry.offsetFromLine = 0;
-    csEntry.lineFileName[0] = 0;
-    csEntry.lineNumber = 0;
-    csEntry.loadedImageName[0] = 0;
-    csEntry.moduleName[0] = 0;
+    ClearCSEntry(csEntry);
 
     // make sure the location of the calling function is reported, and not of the next statement
     if (frameNum != 0 && csEntry.offset != 0)
@@ -1261,34 +1312,6 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     if (csEntry.offset != 0)
     {
       // we seem to have a valid PC
-      // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->pSGSFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromSymbol),
-                             pSym) != FALSE)
-      {
-        MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
-        // UnDecorateSymbolName()
-        this->m_sw->pUDSN(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY);
-        this->m_sw->pUDSN(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE);
-      }
-      else
-      {
-        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), csEntry.offset);
-      }
-
-      // show line number info, NT5.0-method (SymGetLineFromAddr64())
-      if (this->m_sw->pSGLFA != NULL)
-      { // yes, we have SymGetLineFromAddr64()
-        if (this->m_sw->pSGLFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromLine),
-                               &Line) != FALSE)
-        {
-          csEntry.lineNumber = Line.LineNumber;
-          MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, Line.FileName);
-        }
-        else
-        {
-          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), csEntry.offset);
-        }
-      } // yes, we have SymGetLineFromAddr64()
 
       // show module info (SymGetModuleInfo64())
       if (this->m_sw->GetModuleInfo(this->m_hProcess, csEntry.offset, &Module) != FALSE)
@@ -1338,13 +1361,94 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
       {
         this->OnDbgHelpErr("SymGetModuleInfo64", GetLastError(), csEntry.offset);
       }
+
+      // show inline frames (SymAddrIncludeInlineTrace())
+      if (this->m_sw->pSAIIT != NULL)
+      {
+        if (DWORD inlineFrames = this->m_sw->pSAIIT(this->m_hProcess, csEntry.offset))
+        {
+          DWORD inlineContext, frameIndex;
+          // SymQueryInlineTrace()
+          if (this->m_sw->pSQIT(this->m_hProcess, csEntry.offset, 0, csEntry.offset, csEntry.offset,
+                                &inlineContext, &frameIndex) != FALSE)
+          {
+            for (DWORD fi = 0; fi < inlineFrames; fi++)
+            {
+              // SymFromInlineContext()
+              if (this->m_sw->pSFIC(this->m_hProcess, csEntry.offset, inlineContext,
+                                    &(csEntry.offsetFromSymbol), pSymInfo) != FALSE)
+              {
+                MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSymInfo->Name);
+                // UnDecorateSymbolName()
+                this->m_sw->pUDSN(pSymInfo->Name, csEntry.undName, STACKWALK_MAX_NAMELEN,
+                                  UNDNAME_NAME_ONLY);
+                this->m_sw->pUDSN(pSymInfo->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN,
+                                  UNDNAME_COMPLETE);
+              }
+              else
+              {
+                this->OnDbgHelpErr("SymFromInlineContext", GetLastError(), csEntry.offset);
+              }
+
+              // SymGetLineFromInlineContext()
+              if (this->m_sw->pSGLFIC(this->m_hProcess, csEntry.offset, inlineContext, 0,
+                                      &(csEntry.offsetFromLine), &Line) != FALSE)
+              {
+                csEntry.lineNumber = Line.LineNumber;
+                MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, Line.FileName);
+              }
+              else
+              {
+                this->OnDbgHelpErr("SymGetLineFromInlineContext", GetLastError(), csEntry.offset);
+              }
+
+              bLastEntryCalled = false;
+              this->OnCallstackEntry(entryType, csEntry);
+              entryType = nextEntry;
+
+              ClearCSEntryInline(csEntry);
+            }
+          }
+          else
+          {
+            this->OnDbgHelpErr("SymQueryInlineTrace", GetLastError(), csEntry.offset);
+          }
+        }
+      }
+
+      // show procedure info (SymGetSymFromAddr64())
+      if (this->m_sw->pSGSFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromSymbol),
+                             pSym) != FALSE)
+      {
+        MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
+        // UnDecorateSymbolName()
+        this->m_sw->pUDSN(pSym->Name, csEntry.undName, STACKWALK_MAX_NAMELEN, UNDNAME_NAME_ONLY);
+        this->m_sw->pUDSN(pSym->Name, csEntry.undFullName, STACKWALK_MAX_NAMELEN, UNDNAME_COMPLETE);
+      }
+      else
+      {
+        this->OnDbgHelpErr("SymGetSymFromAddr64", GetLastError(), csEntry.offset);
+      }
+
+      // show line number info, NT5.0-method (SymGetLineFromAddr64())
+      if (this->m_sw->pSGLFA != NULL)
+      { // yes, we have SymGetLineFromAddr64()
+        if (this->m_sw->pSGLFA(this->m_hProcess, csEntry.offset, &(csEntry.offsetFromLine),
+                               &Line) != FALSE)
+        {
+          csEntry.lineNumber = Line.LineNumber;
+          MyStrCpy(csEntry.lineFileName, STACKWALK_MAX_NAMELEN, Line.FileName);
+        }
+        else
+        {
+          this->OnDbgHelpErr("SymGetLineFromAddr64", GetLastError(), csEntry.offset);
+        }
+      } // yes, we have SymGetLineFromAddr64()
     } // we seem to have a valid PC
 
-    CallstackEntryType et = nextEntry;
-    if (frameNum == 0)
-      et = firstEntry;
     bLastEntryCalled = false;
-    this->OnCallstackEntry(et, csEntry);
+    this->OnCallstackEntry(entryType, csEntry);
+    entryType = nextEntry;
 
     if (s.AddrReturn.Offset == 0)
     {
@@ -1358,6 +1462,8 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
 cleanup:
   if (pSym)
     free(pSym);
+  if (pSymInfo)
+    free(pSymInfo);
 
   if (bLastEntryCalled == false)
     this->OnCallstackEntry(lastEntry, csEntry);
@@ -1406,6 +1512,25 @@ BOOL StackWalker::ShowObject(LPVOID pObject)
   free(pSym);
   return TRUE;
 };
+
+void StackWalker::ClearCSEntryInline(CallstackEntry& csEntry)
+{
+    csEntry.name[0] = 0;
+    csEntry.undName[0] = 0;
+    csEntry.undFullName[0] = 0;
+    csEntry.offsetFromSymbol = 0;
+    csEntry.offsetFromLine = 0;
+    csEntry.lineFileName[0] = 0;
+    csEntry.lineNumber = 0;
+}
+
+void StackWalker::ClearCSEntry(CallstackEntry& csEntry)
+{
+    ClearCSEntryInline(csEntry);
+    csEntry.loadedImageName[0] = 0;
+    csEntry.moduleName[0] = 0;
+    csEntry.baseOfImage = 0;
+}
 
 BOOL __stdcall StackWalker::myReadProcMem(HANDLE  hProcess,
                                           DWORD64 qwBaseAddress,

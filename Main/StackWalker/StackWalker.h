@@ -91,11 +91,14 @@ public:
     // Also use the public Microsoft-Symbol-Server
     SymUseSymSrv = 0x20,
 
+    // Retrieve inline stack frames
+    SymGetInlineFrames = 0x40,
+
     // Contains all the above "Sym"-options
-    SymAll = 0x30,
+    SymAll = 0x70,
 
     // Contains all options (default)
-    OptionsAll = 0x3F
+    OptionsAll = 0x7F
   } StackWalkOptions;
 
   StackWalker(ExceptType extype, int options = OptionsAll, PEXCEPTION_POINTERS exp = NULL);
@@ -168,6 +171,9 @@ protected:
     DWORD64 baseOfImage;
     CHAR    loadedImageName[STACKWALK_MAX_NAMELEN];
   } CallstackEntry;
+
+  void ClearCSEntry(CallstackEntry& csEntry);
+  void ClearCSEntryInline(CallstackEntry& csEntry);
 
   typedef enum CallstackEntryType
   {
