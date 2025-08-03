@@ -377,6 +377,10 @@ public:
     pSLM = (tSLM)GetProcAddress(m_hDbhHelp, "SymLoadModule64");
     pSGSP = (tSGSP)GetProcAddress(m_hDbhHelp, "SymGetSearchPath");
 
+    pSAIIT = NULL;
+    pSQIT = NULL;
+    pSFIC = NULL;
+    pSGLFIC = NULL;
     if ((this->m_parent->m_options & StackWalker::SymGetInlineFrames) != 0)
     {
       pSAIIT = (tSAIIT)GetProcAddress(m_hDbhHelp, "SymAddrIncludeInlineTrace");
