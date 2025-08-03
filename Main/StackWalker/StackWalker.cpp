@@ -1236,7 +1236,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     csEntry.name[0] = 0;
     csEntry.undName[0] = 0;
     csEntry.undFullName[0] = 0;
-    csEntry.offsetFromSmybol = 0;
+    csEntry.offsetFromSymbol = 0;
     csEntry.offsetFromLine = 0;
     csEntry.lineFileName[0] = 0;
     csEntry.lineNumber = 0;
@@ -1257,7 +1257,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
     {
       // we seem to have a valid PC
       // show procedure info (SymGetSymFromAddr64())
-      if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSmybol),
+      if (this->m_sw->pSGSFA(this->m_hProcess, s.AddrPC.Offset, &(csEntry.offsetFromSymbol),
                              pSym) != FALSE)
       {
         MyStrCpy(csEntry.name, STACKWALK_MAX_NAMELEN, pSym->Name);
