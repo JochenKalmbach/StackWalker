@@ -1411,6 +1411,7 @@ BOOL StackWalker::ShowCallstack(HANDLE                    hThread,
               entryType = nextEntry;
 
               ClearCSEntryInline(csEntry);
+              inlineContext++;
             }
           }
           else
